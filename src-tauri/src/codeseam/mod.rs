@@ -24,6 +24,7 @@ struct Session {
 struct Runtime {
     session: Option<Session>,
     services: Vec<Value>,
+    network: Option<Value>,
     child: Option<std::process::Child>,
 }
 struct Desktop {
@@ -43,7 +44,7 @@ impl Desktop {
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(30))
-                .user_agent("CodeSeam-Desktop-P1")
+                .user_agent("CodeSeam-Desktop-P2")
                 .build()
                 .expect("HTTP client"),
         }
@@ -81,6 +82,7 @@ impl Desktop {
     }
     async fn services(&self, r: &mut Runtime) -> Result<(), String> {
         self.stop().await;
+        r.network = None;
         let s = r.session.as_mut().ok_or("请先登录")?;
         self.renew(s, false).await?;
         let data = self.api(s, "/codeseam/service/current", None).await?;
@@ -89,6 +91,7 @@ impl Desktop {
     }
     async fn activate(&self, r: &mut Runtime, id: i64) -> Result<(), String> {
         self.stop().await;
+        r.network = None;
         let s = r.session.as_mut().ok_or("请先登录")?;
         self.renew(s, false).await?;
         let data = self
@@ -102,6 +105,12 @@ impl Desktop {
             .as_str()
             .filter(|s| !s.is_empty())
             .ok_or("缺少受管授权")?;
+        let network = self.api(s, "/codeseam/client/network-config", Some(json!({"service_id":id}))).await?;
+        if network["service_id"].as_i64() != Some(id)
+            || network["revision"].as_str().filter(|v| !v.is_empty()).is_none()
+            || network["revision"] != data["network_revision"] {
+            return Err("服务网络配置已变化，请重新连接".into());
+        }
         let config = ProxyRuntimeConfig {
             managed_only: true,
             error_log_enabled: false,
@@ -117,6 +126,7 @@ impl Desktop {
                 proxy: None,
             },
         );
+        r.network = Some(network);
         s.service_id = Some(id);
         if let Err(e) = save(s) {
             self.stop().await;
@@ -181,6 +191,7 @@ async fn cs_login(
     state.stop().await;
     r.session = None;
     r.services.clear();
+    r.network = None;
     vault::remove(SESSION)?;
     let mut s = Session {
         server: server_url(&server)?,
@@ -225,6 +236,12 @@ async fn cs_resume(state: State<'_, Desktop>) -> Result<Value, String> {
     }
     Ok(status(&state, &mut r))
 }
+// Explicit allowlist: credentials stay in Rust memory, never in React/status/DPAPI.
+fn network_summary(v: &Value) -> Value {
+    json!({"revision":v["revision"], "expected_egress":v["expected_egress"],
+        "expires_at":v["expires_at"], "proxy_expires_at":v["proxy_expires_at"],
+        "protocol":v["proxy"]["protocol"], "egress_verified":false})
+}
 fn status(state: &Desktop, r: &mut Runtime) -> Value {
     let pid = r.child.as_mut().and_then(|c| {
         if c.try_wait().ok().flatten().is_none() {
@@ -235,7 +252,7 @@ fn status(state: &Desktop, r: &mut Runtime) -> Value {
     });
     json!({"logged_in":r.session.is_some(),"server":r.session.as_ref().map(|s|&s.server),"services":r.services,
         "service_id":r.session.as_ref().and_then(|s|s.service_id),"proxy_running":state.proxy.is_running(),"local_url":proxy::local_base(PORT,"claude"),
-        "configured":cli::configured(PORT),"cli":cli::detect(),"cli_pid":pid,"requests":state.proxy.counters("claude").map(|c|c.total())})
+        "network":r.network.as_ref().map(network_summary),"configured":cli::configured(PORT),"cli":cli::detect(),"cli_pid":pid,"requests":state.proxy.counters("claude").map(|c|c.total())})
 }
 #[tauri::command]
 async fn cs_status(state: State<'_, Desktop>) -> Result<Value, String> {
@@ -316,7 +333,9 @@ async fn cs_stop(state: State<'_, Desktop>) -> Result<(), String> {
 }
 #[tauri::command]
 async fn cs_disconnect(state: State<'_, Desktop>) -> Result<(), String> {
+    let mut r = state.inner.lock().await;
     state.stop().await;
+    r.network = None;
     Ok(())
 }
 #[tauri::command]
@@ -329,6 +348,7 @@ async fn cs_logout(state: State<'_, Desktop>) -> Result<(), String> {
             .await;
     }
     r.services.clear();
+    r.network = None;
     vault::remove(SESSION)
 }
 
@@ -361,6 +381,13 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn network_status_does_not_disclose_credentials() {
+        let v = json!({"revision":"v1","expected_egress":"192.0.2.1", "proxy":{"protocol":"http", "host":"private-host", "username":"private-user", "password":"private-password"}});
+        let summary = network_summary(&v).to_string();
+        assert!(!summary.contains("private-"));
+        assert!(summary.contains("192.0.2.1"));
+    }
     #[test]
     fn rejects_unsafe_cloud_urls() {
         for u in [

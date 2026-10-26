@@ -4,7 +4,7 @@ import "./style.css";
 import codeseamLogo from "./assets/codeseam-logo.svg";
 
 type Service = { id: number; name: string; state: string; expires_at: string | null };
-type Status = { logged_in: boolean; server?: string; services: Service[]; service_id?: number; proxy_running: boolean; configured: boolean; cli?: string; cli_pid?: number; local_url: string; requests?: number };
+type Status = { logged_in: boolean; server?: string; services: Service[]; service_id?: number; proxy_running: boolean; configured: boolean; cli?: string; cli_pid?: number; local_url: string; network?: { revision: string; expected_egress: string; protocol: string }; requests?: number };
 
 export default function App() {
   const [status, setStatus] = useState<Status>();
@@ -24,7 +24,7 @@ export default function App() {
   }
   useEffect(() => { run("cs_resume"); const timer = setInterval(() => refresh().catch(() => {}), 3000); return () => clearInterval(timer); }, []);
   return <main>
-    <header><div className="brand"><img className="brand-logo" src={codeseamLogo} alt="CodeSeam" /><span>CodeSeam</span></div><span className="badge">Windows · P1 开发版</span></header>
+    <header><div className="brand"><img className="brand-logo" src={codeseamLogo} alt="CodeSeam" /><span>CodeSeam</span></div><span className="badge">Windows · P2 开发版</span></header>
     <h1>连接你的编程服务</h1>
     <p className="intro">登录、激活服务，然后通过本地受管连接使用 Claude Code。</p>
     {error && <div role="alert" className="error">{error}</div>}
@@ -47,6 +47,7 @@ export default function App() {
       </div>)}
       <div className="connection"><i className={status?.proxy_running ? "online" : ""} />{status?.proxy_running ? "本地代理运行中" : "本地代理未连接"} · {status?.local_url || "http://127.0.0.1:18899/claude"}</div>
       <p className="subtle">授权有效不代表上游健康；实际请求结果由云端 Gateway 决定。已转发请求：{status?.requests || 0}</p>
+      {status?.network && <p className="subtle">已领取服务网络配置 · {status.network.protocol} · 预期出口 {status.network.expected_egress}<br />配置版本 {status.network.revision.slice(0, 12)} · 实际出口尚未验证；进程网络保护待 P3。</p>}
       <button disabled={busy || !status?.proxy_running} onClick={() => run("cs_disconnect")}>断开本地代理</button>
     </section>
     <section>
@@ -61,6 +62,6 @@ export default function App() {
         <button disabled={busy || !!status?.cli_pid} onClick={() => run("cs_restore")}>恢复原配置</button>
       </div>
     </section>
-    <footer>关闭客户端会停止本地 API 代理；重启后会重新验证授权。开发版仅验证 API 连接，不声明独享出口或系统网络防泄漏能力。<br />基于 Z-Switch（MIT）与 Sub2API（LGPL-3.0），保留原项目许可。</footer>
+    <footer>关闭客户端会停止本地 API 代理；重启后会重新验证授权。独享 API 路由由云端校验。网络配置领取不代表实际出口一致或系统网络防泄漏已通过。<br />基于 Z-Switch（MIT）与 Sub2API（LGPL-3.0），保留原项目许可。</footer>
   </main>;
 }
