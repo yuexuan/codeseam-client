@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="CodeSeam logo">
+  <defs>
+    <linearGradient id="cs-copper" x1="12" y1="5" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D49A4D"/>
+      <stop offset="0.35" stop-color="#BF7D30"/>
+      <stop offset="0.75" stop-color="#B16D25"/>
+      <stop offset="1" stop-color="#955314"/>
+    </linearGradient>
+    <linearGradient id="cs-gold" x1="41" y1="15" x2="55" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F6BF70"/>
+      <stop offset="0.57" stop-color="#EAA54C"/>
+      <stop offset="1" stop-color="#D8892E"/>
+    </linearGradient>
+  </defs>
+  <path d="M36.5 10.2 A22 22 0 1 0 53.2 38.3" stroke="url(#cs-copper)" stroke-width="13.9" stroke-linecap="round"/>
+  <circle cx="47.2" cy="21.5" r="7.7" fill="url(#cs-gold)"/>
+</svg>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./style.css";
+import codeseamLogo from "./assets/codeseam-logo.svg";
 
 type Service = { id: number; name: string; state: string; expires_at: string | null };
 type Status = { logged_in: boolean; server?: string; services: Service[]; service_id?: number; proxy_running: boolean; configured: boolean; cli?: string; cli_pid?: number; local_url: string; requests?: number };
@@ -23,7 +24,7 @@ export default function App() {
   }
   useEffect(() => { run("cs_resume"); const timer = setInterval(() => refresh().catch(() => {}), 3000); return () => clearInterval(timer); }, []);
   return <main>
-    <header><div className="brand">C<span>CodeSeam</span></div><span className="badge">Windows · P1 开发版</span></header>
+    <header><div className="brand"><img className="brand-logo" src={codeseamLogo} alt="CodeSeam" /><span>CodeSeam</span></div><span className="badge">Windows · P1 开发版</span></header>
     <h1>连接你的编程服务</h1>
     <p className="intro">登录、激活服务，然后通过本地受管连接使用 Claude Code。</p>
     {error && <div role="alert" className="error">{error}</div>}
