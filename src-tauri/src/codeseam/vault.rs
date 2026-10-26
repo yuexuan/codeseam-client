@@ -2,9 +2,13 @@
 use std::{fs, path::PathBuf};
 
 pub fn dir() -> Result<PathBuf, String> {
-    let p = dirs::data_local_dir()
-        .ok_or("找不到用户数据目录")?
-        .join("CodeSeam");
+    #[cfg(test)]
+    let root = std::env::var_os("CODESEAM_TEST_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(dirs::data_local_dir);
+    #[cfg(not(test))]
+    let root = dirs::data_local_dir();
+    let p = root.ok_or("找不到用户数据目录")?.join("CodeSeam");
     fs::create_dir_all(&p).map_err(|e| e.to_string())?;
     Ok(p)
 }

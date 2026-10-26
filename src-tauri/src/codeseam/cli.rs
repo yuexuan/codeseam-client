@@ -145,10 +145,11 @@ pub fn hidden(program: &str) -> Command {
     }
     c
 }
-pub fn launch(port: u16) -> Result<std::process::Child, String> {
+pub fn launch(port: u16, assigned_proxy: Option<&str>) -> Result<std::process::Child, String> {
     if !configured(port) {
         return Err("请先确认配置 localhost；配置漂移时禁止启动".into());
     }
+    let assigned_proxy = assigned_proxy.ok_or("缺少受管代理，已拒绝启动以避免直连降级")?;
     let exe = detect().ok_or("未检测到 Claude Code，请先安装官方 CLI")?;
     // Launch a visible terminal only for the CLI the user explicitly starts.
     let mut c = Command::new("powershell.exe");
@@ -166,6 +167,14 @@ pub fn launch(port: u16) -> Result<std::process::Child, String> {
         "CLAUDE_CODE_USE_BEDROCK",
         "CLAUDE_CODE_USE_VERTEX",
         "CLAUDE_CODE_USE_FOUNDRY",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "NO_PROXY",
+        "no_proxy",
     ] {
         c.env_remove(name);
     }
@@ -173,7 +182,14 @@ pub fn launch(port: u16) -> Result<std::process::Child, String> {
         "ANTHROPIC_BASE_URL",
         format!("http://127.0.0.1:{port}/claude"),
     )
-    .env("ANTHROPIC_AUTH_TOKEN", TOKEN);
+    .env("ANTHROPIC_AUTH_TOKEN", TOKEN)
+    // Best-effort process path for non-API requests. This is deliberately not
+    // reported as network-layer protection; a Windows WFP/TUN rule is still
+    // needed before that surface can be called fully covered.
+    .env("HTTP_PROXY", assigned_proxy)
+    .env("HTTPS_PROXY", assigned_proxy)
+    .env("ALL_PROXY", assigned_proxy)
+    .env("NO_PROXY", "127.0.0.1,localhost,[::1]");
     c.spawn().map_err(|e| format!("启动 Claude 失败：{e}"))
 }
 
@@ -193,5 +209,53 @@ mod tests {
         assert!(matches(&v, &b));
         v["env"]["ANTHROPIC_API_KEY"] = json!("external");
         assert!(!matches(&v, &b));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn configure_and_restore_round_trip_preserves_unmanaged_fields() {
+        let _lock = crate::config::TEST_HOME_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "codeseam-cli-restore-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let config_dir = root.join("claude");
+        let data_dir = root.join("data");
+        fs::create_dir_all(&config_dir).unwrap();
+        let config_path = config_dir.join("settings.json");
+        fs::write(
+            &config_path,
+            br#"{"env":{"ANTHROPIC_API_KEY":"original-key","OTHER":"keep"},"permissions":{"deny":["Bash(rm:*)"]}}"#,
+        )
+        .unwrap();
+        let old_config = std::env::var_os("CLAUDE_CONFIG_DIR");
+        let old_data = std::env::var_os("CODESEAM_TEST_DATA_DIR");
+        std::env::set_var("CLAUDE_CONFIG_DIR", &config_dir);
+        std::env::set_var("CODESEAM_TEST_DATA_DIR", &data_dir);
+        let result = (|| {
+            configure(18899)?;
+            let managed: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+            assert_eq!(managed["env"]["ANTHROPIC_AUTH_TOKEN"], TOKEN);
+            assert_eq!(managed["env"]["OTHER"], "keep");
+            restore()?;
+            let restored: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+            assert_eq!(restored["env"]["ANTHROPIC_API_KEY"], "original-key");
+            assert_eq!(restored["env"]["OTHER"], "keep");
+            Ok::<(), String>(())
+        })();
+        match old_config {
+            Some(value) => std::env::set_var("CLAUDE_CONFIG_DIR", value),
+            None => std::env::remove_var("CLAUDE_CONFIG_DIR"),
+        }
+        match old_data {
+            Some(value) => std::env::set_var("CODESEAM_TEST_DATA_DIR", value),
+            None => std::env::remove_var("CODESEAM_TEST_DATA_DIR"),
+        }
+        let _ = fs::remove_dir_all(root);
+        result.unwrap();
     }
 }

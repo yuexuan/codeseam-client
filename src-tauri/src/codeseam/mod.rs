@@ -1,5 +1,6 @@
 //! P1 entry point. Upstream provider import/export and update startup are not run.
 mod cli;
+mod network;
 mod vault;
 
 use crate::proxy::{self, AppTarget, ProxyControl, ProxyHandle, ProxyRuntimeConfig};
@@ -105,12 +106,24 @@ impl Desktop {
             .as_str()
             .filter(|s| !s.is_empty())
             .ok_or("缺少受管授权")?;
-        let network = self.api(s, "/codeseam/client/network-config", Some(json!({"service_id":id}))).await?;
+        let network = self
+            .api(
+                s,
+                "/codeseam/client/network-config",
+                Some(json!({"service_id":id})),
+            )
+            .await?;
         if network["service_id"].as_i64() != Some(id)
-            || network["revision"].as_str().filter(|v| !v.is_empty()).is_none()
-            || network["revision"] != data["network_revision"] {
+            || network["revision"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .is_none()
+            || network["revision"] != data["network_revision"]
+        {
             return Err("服务网络配置已变化，请重新连接".into());
         }
+        let assigned_proxy = network::assigned_proxy_url(&network)
+            .ok_or("服务未下发受支持的 HTTP(S) 专属代理，已拒绝直连降级")?;
         let config = ProxyRuntimeConfig {
             managed_only: true,
             error_log_enabled: false,
@@ -123,7 +136,7 @@ impl Desktop {
             AppTarget {
                 base_url: s.server.clone(),
                 headers: vec![("x-api-key".into(), key.into())],
-                proxy: None,
+                proxy: Some(assigned_proxy),
             },
         );
         r.network = Some(network);
@@ -242,6 +255,18 @@ fn network_summary(v: &Value) -> Value {
         "expires_at":v["expires_at"], "proxy_expires_at":v["proxy_expires_at"],
         "protocol":v["proxy"]["protocol"], "egress_verified":false})
 }
+
+fn report_context(state: &Desktop, r: &Runtime) -> Option<network::Context> {
+    let network = r.network.as_ref()?;
+    Some(network::Context {
+        local_port: PORT,
+        server_url: r.session.as_ref()?.server.clone(),
+        expected_egress: network["expected_egress"].as_str().map(str::to_owned),
+        assigned_proxy: network::assigned_proxy_url(network),
+        proxy_running: state.proxy.is_running(),
+        cli_configured: cli::configured(PORT),
+    })
+}
 fn status(state: &Desktop, r: &mut Runtime) -> Value {
     let pid = r.child.as_mut().and_then(|c| {
         if c.try_wait().ok().flatten().is_none() {
@@ -258,6 +283,16 @@ fn status(state: &Desktop, r: &mut Runtime) -> Value {
 async fn cs_status(state: State<'_, Desktop>) -> Result<Value, String> {
     let mut r = state.inner.lock().await;
     Ok(status(&state, &mut r))
+}
+
+/// 运行一次真实网络探针。公网专属出口、DNS 远端解析和非 API 进程规则
+/// 都按证据分别报告；缺少证据时返回 unknown/not_covered。
+#[tauri::command]
+async fn cs_diagnose(state: State<'_, Desktop>) -> Result<network::Report, String> {
+    let r = state.inner.lock().await;
+    let context = report_context(&state, &r).ok_or("请先登录并激活服务")?;
+    drop(r);
+    Ok(network::diagnose(context).await)
 }
 #[tauri::command]
 async fn cs_refresh(state: State<'_, Desktop>) -> Result<Value, String> {
@@ -282,6 +317,19 @@ async fn cs_configure(state: State<'_, Desktop>, confirmed: bool) -> Result<(), 
     }
     if !state.proxy.is_running() {
         return Err("请先激活服务".into());
+    }
+    cli::configure(PORT)
+}
+
+/// 受用户确认的环境修复：只恢复 CodeSeam 托管的 Claude API 字段，
+/// 先在 DPAPI 中保留原始配置；不静默修改系统 DNS、IPv6 或全局防火墙。
+#[tauri::command]
+async fn cs_repair_environment(state: State<'_, Desktop>, confirmed: bool) -> Result<(), String> {
+    if !confirmed {
+        return Err("环境修复需要确认：仅修改 Claude API 地址/授权，并保留原始配置备份".into());
+    }
+    if !state.proxy.is_running() {
+        return Err("受管代理未运行，拒绝写入会导致直连的配置".into());
     }
     cli::configure(PORT)
 }
@@ -311,7 +359,15 @@ async fn cs_launch(state: State<'_, Desktop>) -> Result<(), String> {
         .and_then(|s| s.service_id)
         .ok_or("请先激活服务")?;
     state.activate(&mut r, id).await?;
-    r.child = Some(cli::launch(PORT)?);
+    let context = report_context(&state, &r).ok_or("网络配置不可用，已拒绝启动")?;
+    let launch_proxy = context.assigned_proxy.clone();
+    let report = network::diagnose(context).await;
+    if !report.can_start {
+        state.stop().await;
+        r.network = None;
+        return Err("网络诊断存在会导致受保护 API 直连的失败项；已保持 Kill-Switch 拒绝状态，请先修复并重新检测".into());
+    }
+    r.child = Some(cli::launch(PORT, launch_proxy.as_deref())?);
     Ok(())
 }
 #[tauri::command]
@@ -365,9 +421,11 @@ pub fn run() {
             cs_login,
             cs_resume,
             cs_status,
+            cs_diagnose,
             cs_refresh,
             cs_activate,
             cs_configure,
+            cs_repair_environment,
             cs_restore,
             cs_launch,
             cs_stop,

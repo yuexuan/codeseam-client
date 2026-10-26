@@ -999,4 +999,44 @@ mod tests {
         assert_eq!(response.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
         control.stop();
     }
+
+    #[tokio::test]
+    async fn managed_proxy_fails_closed_when_target_or_listener_is_gone() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let handle = ProxyHandle::default();
+        let mut control = ProxyControl::new(handle);
+        control
+            .start(
+                port,
+                ProxyRuntimeConfig {
+                    managed_only: true,
+                    error_log_enabled: false,
+                    ..ProxyRuntimeConfig::default()
+                },
+            )
+            .await
+            .unwrap();
+        let client = reqwest::Client::new();
+        let response = client
+            .get(format!("http://127.0.0.1:{port}/claude/v1/models"))
+            .header("x-api-key", "codeseam-local-managed")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+        control.stop();
+        let stopped = client
+            .get(format!("http://127.0.0.1:{port}/claude/v1/models"))
+            .header("x-api-key", "codeseam-local-managed")
+            .send()
+            .await;
+        assert!(
+            stopped.is_err(),
+            "stopped localhost listener must reject, never direct-fallback"
+        );
+    }
 }

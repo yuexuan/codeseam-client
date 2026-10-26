@@ -5,6 +5,10 @@ import codeseamLogo from "./assets/codeseam-logo.svg";
 
 type Service = { id: number; name: string; state: string; expires_at: string | null };
 type Status = { logged_in: boolean; server?: string; services: Service[]; service_id?: number; proxy_running: boolean; configured: boolean; cli?: string; cli_pid?: number; local_url: string; network?: { revision: string; expected_egress: string; protocol: string }; requests?: number };
+type Check = { id: string; label: string; status: string; detail: string; evidence?: string; protected: boolean; remediation?: string };
+type NetworkReport = { generatedAt: number; checks: Check[]; canStart: boolean; apiProtection: string; nonApiCoverage: string };
+
+const statusText: Record<string, string> = { pass: "PASS", warning: "非 PASS · 警告", fail: "非 PASS · 失败", unknown: "无法确认", not_applicable: "不适用" };
 
 export default function App() {
   const [status, setStatus] = useState<Status>();
@@ -15,16 +19,27 @@ export default function App() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [report, setReport] = useState<NetworkReport>();
   const refresh = async () => setStatus(await invoke<Status>("cs_status"));
+  const diagnose = async () => {
+    try { setReport(await invoke<NetworkReport>("cs_diagnose")); }
+    catch (e) { setError(String(e)); }
+  };
   async function run(command: string, args?: Record<string, unknown>) {
     setBusy(true); setError(""); setNotice("");
-    try { await invoke(command, args); await refresh(); setNotice("操作已完成"); }
+    try {
+      await invoke(command, args);
+      await refresh();
+      if (command !== "cs_disconnect" && command !== "cs_logout") await diagnose();
+      else setReport(undefined);
+      setNotice("操作已完成");
+    }
     catch (e) { setError(String(e)); await refresh().catch(() => {}); }
     finally { setBusy(false); }
   }
   useEffect(() => { run("cs_resume"); const timer = setInterval(() => refresh().catch(() => {}), 3000); return () => clearInterval(timer); }, []);
   return <main>
-    <header><div className="brand"><img className="brand-logo" src={codeseamLogo} alt="CodeSeam" /><span>CodeSeam</span></div><span className="badge">Windows · P2 开发版</span></header>
+    <header><div className="brand"><img className="brand-logo" src={codeseamLogo} alt="CodeSeam" /><span>CodeSeam</span></div><span className="badge">Windows · P3 开发版</span></header>
     <h1>连接你的编程服务</h1>
     <p className="intro">登录、激活服务，然后通过本地受管连接使用 Claude Code。</p>
     {error && <div role="alert" className="error">{error}</div>}
@@ -47,7 +62,7 @@ export default function App() {
       </div>)}
       <div className="connection"><i className={status?.proxy_running ? "online" : ""} />{status?.proxy_running ? "本地代理运行中" : "本地代理未连接"} · {status?.local_url || "http://127.0.0.1:18899/claude"}</div>
       <p className="subtle">授权有效不代表上游健康；实际请求结果由云端 Gateway 决定。已转发请求：{status?.requests || 0}</p>
-      {status?.network && <p className="subtle">已领取服务网络配置 · {status.network.protocol} · 预期出口 {status.network.expected_egress}<br />配置版本 {status.network.revision.slice(0, 12)} · 实际出口尚未验证；进程网络保护待 P3。</p>}
+      {status?.network && <p className="subtle">已领取服务网络配置 · {status.network.protocol} · 预期出口 {status.network.expected_egress}<br />配置版本 {status.network.revision.slice(0, 12)} · 诊断结果以实际探针为准。</p>}
       <button disabled={busy || !status?.proxy_running} onClick={() => run("cs_disconnect")}>断开本地代理</button>
     </section>
     <section>
@@ -61,6 +76,20 @@ export default function App() {
         <button disabled={busy || !status?.cli_pid} onClick={() => run("cs_stop")}>关闭 Claude 终端</button>
         <button disabled={busy || !!status?.cli_pid} onClick={() => run("cs_restore")}>恢复原配置</button>
       </div>
+    </section>
+    <section className="diagnostics">
+      <div className="row"><div><h2>4 · 网络环境诊断与断线保护</h2><p className="subtle">探针会真实访问出口地址、解析服务主机并检查 UDP；结果只代表已显示的路径。</p></div><button disabled={busy || !status?.network} onClick={diagnose}>重新检测</button></div>
+      {!report ? <p>激活服务后运行检测。未运行检测前不显示正常状态。</p> : <>
+        <div className={`summary summary-${report.apiProtection}`}><strong>API 保护：{statusText[report.apiProtection] || report.apiProtection}</strong><span>非 API 流量：未覆盖（{report.nonApiCoverage}）</span></div>
+        <div className="checks">{report.checks.map(check => <div className={`check check-${check.status}`} key={check.id}>
+          <div className="check-head"><strong>{check.label}</strong><span>{statusText[check.status] || check.status}</span></div>
+          <p>{check.detail}</p>
+          {check.evidence && <code>{check.evidence}</code>}
+          {check.remediation && <small>建议：{check.remediation}</small>}
+        </div>)}</div>
+        <p className="subtle">“PASS”只表示该条证据满足当前检查；DNS 远端解析、UDP/WebRTC 和 Claude Code 非 API 路径没有被 HTTP 代理自动证明。</p>
+        <div className="actions"><button disabled={busy || !status?.proxy_running} onClick={() => run("cs_repair_environment", { confirmed: true })}>备份并修复受管配置</button><button disabled={busy || !!status?.cli_pid} onClick={() => run("cs_restore")}>恢复原始配置</button></div>
+      </>}
     </section>
     <footer>关闭客户端会停止本地 API 代理；重启后会重新验证授权。独享 API 路由由云端校验。网络配置领取不代表实际出口一致或系统网络防泄漏已通过。<br />基于 Z-Switch（MIT）与 Sub2API（LGPL-3.0），保留原项目许可。</footer>
   </main>;
