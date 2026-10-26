@@ -1,5 +1,6 @@
 //! z-switch 后端入口 + Tauri 命令。
 mod ccswitch;
+mod codeseam;
 mod claude_desktop;
 mod claude_ext;
 mod config;
@@ -1449,7 +1450,10 @@ fn apply_rounded_corners(window: &tauri::WebviewWindow) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
+pub fn run() { codeseam::run(); }
+
+#[allow(dead_code)]
+fn run_upstream() {
     let mut root = store::load();
     let mut root_changed = root.ensure_official_providers();
 

@@ -33,6 +33,8 @@ pub const DEFAULT_PORT: u16 = 8899;
 /// 本地路由运行参数。缺省值偏保守，所有数值在读取设置时都会限制范围。
 #[derive(Clone, Debug)]
 pub struct ProxyRuntimeConfig {
+    /// CodeSeam managed entry: fixed API surface, no redirects or environment proxy.
+    pub managed_only: bool,
     pub connect_timeout: Duration,
     pub streaming_first_byte_timeout: Duration,
     pub streaming_idle_timeout: Duration,
@@ -47,6 +49,7 @@ pub struct ProxyRuntimeConfig {
 impl Default for ProxyRuntimeConfig {
     fn default() -> Self {
         Self {
+            managed_only: false,
             connect_timeout: Duration::from_secs(10),
             streaming_first_byte_timeout: Duration::from_secs(60),
             streaming_idle_timeout: Duration::from_secs(120),
@@ -78,6 +81,7 @@ impl ProxyRuntimeConfig {
             256,
         );
         Self {
+            managed_only: false,
             connect_timeout: Duration::from_secs(number(
                 "connectTimeoutSeconds",
                 defaults.connect_timeout.as_secs(),
@@ -281,6 +285,7 @@ fn now_ms() -> u64 {
 
 /// 代理生命周期控制器，存进 ProxyState（async 锁保护起停）。
 pub struct ProxyControl {
+    task: Option<tauri::async_runtime::JoinHandle<()>>,
     handle: ProxyHandle,
     /// 触发优雅停机；Some 表示服务在跑。
     shutdown: Option<oneshot::Sender<()>>,
@@ -290,6 +295,7 @@ impl ProxyControl {
     /// 与 managed ProxyHandle 共享同一 Arc。
     pub fn new(handle: ProxyHandle) -> Self {
         Self {
+            task: None,
             handle,
             shutdown: None,
         }
@@ -298,6 +304,10 @@ impl ProxyControl {
     /// 启动 localhost 服务。已在跑则先停再起。
     pub async fn start(&mut self, port: u16, config: ProxyRuntimeConfig) -> Result<(), String> {
         self.stop();
+        if let Some(task) = self.task.take() {
+            task.abort();
+            let _ = task.await;
+        }
         let addr = format!("127.0.0.1:{port}");
         let listener = tokio::net::TcpListener::bind(&addr)
             .await
@@ -326,7 +336,7 @@ impl ProxyControl {
         self.handle.running.store(true, Ordering::SeqCst);
 
         let running = self.handle.running.clone();
-        tauri::async_runtime::spawn(async move {
+        self.task = Some(tauri::async_runtime::spawn(async move {
             let server = axum::serve(listener, app).with_graceful_shutdown(async move {
                 let _ = rx.await;
             });
@@ -334,7 +344,7 @@ impl ProxyControl {
                 eprintln!("[z-switch] 代理服务退出：{e}");
             }
             running.store(false, Ordering::SeqCst);
-        });
+        }));
         Ok(())
     }
 
@@ -353,7 +363,14 @@ fn build_client(config: &ProxyRuntimeConfig, proxy: Option<&str>) -> Result<reqw
         .connect_timeout(config.connect_timeout)
         .pool_max_idle_per_host(config.pool_max_idle_per_host)
         .tcp_keepalive(config.tcp_keepalive);
-    crate::netproxy::apply_to_builder(builder, proxy)?
+    let builder = if config.managed_only {
+        builder
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+    } else {
+        crate::netproxy::apply_to_builder(builder, proxy)?
+    };
+    builder
         .build()
         .map_err(|e| format!("构建代理 HTTP 客户端失败：{e}"))
 }
@@ -459,6 +476,27 @@ async fn forward(
         Some((a, r)) => (a.to_string(), format!("/{r}")),
         None => (trimmed.to_string(), String::new()),
     };
+
+    if rt.config.managed_only {
+        let authorized = headers.get("x-api-key").and_then(|v| v.to_str().ok())
+            == Some("codeseam-local-managed")
+            || headers.get("authorization").and_then(|v| v.to_str().ok())
+                == Some("Bearer codeseam-local-managed");
+        if !authorized {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "CodeSeam：缺少本地占位授权".into(),
+            ));
+        }
+        if app != "claude"
+            || !matches!(
+                (method.as_str(), rest.as_str()),
+                ("POST", "/v1/messages" | "/v1/messages/count_tokens") | ("GET", "/v1/models")
+            )
+        {
+            return Err((StatusCode::NOT_FOUND, "CodeSeam：不支持此 API 路径".into()));
+        }
+    }
 
     // 本地活跃度计数（按客户端）：进入 handler 即 +1 并记活跃时间；guard 在函数/流结束时 -1。
     // 只数事件，不读 body、不看 key。

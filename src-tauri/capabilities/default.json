@@ -21,7 +21,6 @@
     "core:window:allow-unminimize",
     "core:window:allow-set-focus",
     "core:window:allow-close",
-    "updater:default",
     "process:allow-restart"
   ]
 }
