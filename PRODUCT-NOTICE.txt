@@ -1,0 +1,21 @@
+CodeSeam Windows MVP 0.5.0
+
+Client source: https://github.com/yuexuan/codeseam-client/tree/dev
+Based on Z-Switch (MIT). See LICENSE.
+Server source: https://github.com/yuexuan/codeseam-server/tree/dev
+Based on Sub2API (LGPL-3.0); the server is not bundled in this installer.
+
+Configure the service HTTPS origin and Portal URL in Settings. HTTP is only
+allowed for loopback development. No user account, API key or proxy password
+is bundled. Claude Code must be installed separately.
+
+Sessions and original Claude settings are protected with Windows CurrentUser
+DPAPI under %LOCALAPPDATA%/CodeSeam. Closing CodeSeam stops the local proxy
+and managed Claude terminal; restarting renews the session. Logout restores
+original managed Claude fields while preserving unrelated settings.
+Uninstall restores managed fields and clears the saved session. If fields
+have changed externally, restore/reconcile them in CodeSeam before uninstall.
+
+Network diagnostics report observed coverage. Non-API process protection and
+real dedicated public egress have not been certified by this MVP package.
+No upstream Z-Switch updater is enabled.

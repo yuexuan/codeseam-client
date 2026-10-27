@@ -45,7 +45,7 @@ impl Desktop {
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
                 .timeout(Duration::from_secs(30))
-                .user_agent("CodeSeam-Desktop-P2")
+                .user_agent("CodeSeam-Desktop/0.5.0")
                 .build()
                 .expect("HTTP client"),
         }
@@ -285,6 +285,65 @@ async fn cs_status(state: State<'_, Desktop>) -> Result<Value, String> {
     Ok(status(&state, &mut r))
 }
 
+#[tauri::command]
+async fn cs_usage(state: State<'_, Desktop>, start: String, end: String) -> Result<Value, String> {
+    let valid = |s: &str| {
+        s.len() == 10
+            && s.bytes().enumerate().all(|(i, b)| {
+                if i == 4 || i == 7 {
+                    b == b'-'
+                } else {
+                    b.is_ascii_digit()
+                }
+            })
+    };
+    if !valid(&start) || !valid(&end) || start > end {
+        return Err("请选择有效日期范围".into());
+    }
+    let mut r = state.inner.lock().await;
+    let s = r.session.as_mut().ok_or("请先登录")?;
+    state.renew(s, false).await?;
+    state
+        .api(
+            s,
+            &format!("/usage/stats?start_date={start}&end_date={end}"),
+            None,
+        )
+        .await
+}
+
+#[tauri::command]
+fn cs_open_portal(url: String) -> Result<(), String> {
+    let u = reqwest::Url::parse(&url).map_err(|_| "门户地址无效")?;
+    let origin = u.origin().ascii_serialization();
+    server_url(&origin)?;
+    if !u.username().is_empty() || u.password().is_some() {
+        return Err("门户地址不能含凭据".into());
+    }
+    cli::hidden("rundll32.exe")
+        .args(["url.dll,FileProtocolHandler", u.as_str()])
+        .spawn()
+        .map_err(|_| "无法打开门户")?;
+    Ok(())
+}
+
+fn stop_child(r: &mut Runtime) {
+    if let Some(c) = r.child.as_mut() {
+        if c.try_wait().ok().flatten().is_none() {
+            let _ = cli::hidden("taskkill.exe")
+                .args(["/PID", &c.id().to_string(), "/T", "/F"])
+                .output();
+        }
+    }
+    r.child = None;
+}
+
+pub fn uninstall() -> Result<(), String> {
+    // Preserve the encrypted backup if drift prevents a safe restoration.
+    cli::restore()?;
+    vault::remove(SESSION)
+}
+
 /// 运行一次真实网络探针。公网专属出口、DNS 远端解析和非 API 进程规则
 /// 都按证据分别报告；缺少证据时返回 unknown/not_covered。
 #[tauri::command]
@@ -398,6 +457,8 @@ async fn cs_disconnect(state: State<'_, Desktop>) -> Result<(), String> {
 async fn cs_logout(state: State<'_, Desktop>) -> Result<(), String> {
     let mut r = state.inner.lock().await;
     state.stop().await;
+    stop_child(&mut r);
+    cli::restore()?;
     if let Some(s) = r.session.take() {
         let _ = state
             .api(&s, "/auth/logout", Some(json!({"refresh_token":s.refresh})))
@@ -421,6 +482,8 @@ pub fn run() {
             cs_login,
             cs_resume,
             cs_status,
+            cs_usage,
+            cs_open_portal,
             cs_diagnose,
             cs_refresh,
             cs_activate,
@@ -432,8 +495,17 @@ pub fn run() {
             cs_disconnect,
             cs_logout
         ])
-        .run(tauri::generate_context!())
-        .expect("CodeSeam 启动失败");
+        .build(tauri::generate_context!())
+        .expect("CodeSeam 启动失败")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                let state = app.state::<Desktop>();
+                tauri::async_runtime::block_on(async {
+                    state.stop().await;
+                    stop_child(&mut *state.inner.lock().await);
+                });
+            }
+        });
 }
 
 #[cfg(test)]

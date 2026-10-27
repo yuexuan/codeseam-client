@@ -1,6 +1,7 @@
 //! z-switch 后端入口 + Tauri 命令。
 mod ccswitch;
 mod codeseam;
+pub use codeseam::uninstall as codeseam_uninstall;
 mod claude_desktop;
 mod claude_ext;
 mod config;

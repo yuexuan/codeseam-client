@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CodeSeam Dev",
-  "version": "0.4.0",
-  "identifier": "app.codeseam.desktop.dev",
+  "productName": "CodeSeam",
+  "version": "0.5.0",
+  "identifier": "app.codeseam.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -14,9 +14,9 @@
     "windows": [
       {
         "label": "main",
-        "title": "CodeSeam · P1 开发版",
-        "width": 900,
-        "height": 900,
+        "title": "CodeSeam",
+        "width": 1080,
+        "height": 760,
         "minWidth": 820,
         "minHeight": 560,
         "resizable": true,
@@ -33,22 +33,30 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": false,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/zsw.ico"
+      "icons/codeseam.ico"
     ],
     "macOS": {
       "signingIdentity": "-"
     },
     "windows": {
       "nsis": {
-        "installerIcon": "icons/zsw.ico",
-        "uninstallerIcon": "icons/zsw.ico"
+        "installerIcon": "icons/codeseam.ico",
+        "uninstallerIcon": "icons/codeseam.ico",
+        "installMode": "currentUser",
+        "installerHooks": "installer-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
       }
+    },
+    "resources": {
+      "../LICENSE": "LICENSE",
+      "../PRODUCT-NOTICE.txt": "PRODUCT-NOTICE.txt"
     }
   },
   "plugins": {}
