@@ -1,0 +1,155 @@
+/* CodeSeam 设计令牌 —— 全部视觉变量集中于此。
+ * 取值来自 docs/design 中的设计稿测量：
+ * 暖白纸感底色、纯白卡片、铜金品牌渐变、绿色成功态、金色选中态。 */
+
+:root {
+  font:
+    13px/1.65 "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-synthesis: none;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: light;
+
+  /* 色板 */
+  --bg: #faf8f3;
+  --surface: #ffffff;
+  --surface-2: #f4f0e8;
+  --border: #ece6db;
+  --border-strong: #ded6c8;
+  --text: #23252c;
+  --text-2: #5f636d;
+  --muted: #8b8e97;
+
+  --gold: #b87324;
+  --gold-strong: #9c5e14;
+  --gold-grad: linear-gradient(135deg, #d2832a, #a55d13);
+  --gold-soft: #fbf3e2;
+  --gold-pill: #f8ecd3;
+  --gold-line: #ecd9b4;
+
+  --green: #37a06c;
+  --green-soft: #e8f5ed;
+  --amber: #c08a20;
+  --amber-soft: #faf1dc;
+  --red: #c0524a;
+  --red-soft: #f9eae7;
+  --track: #f1ede5;
+  --prog-grad: linear-gradient(90deg, #e89133, #f9b75b);
+
+  /* 图表：铜金单色系（取自用量页设计稿的折线 / 柱 / 环形图） */
+  --chart-line: #c87828;
+  --chart-bar: #e8d0b0;
+  --chart-1: #b06018;
+  --chart-2: #e0a068;
+  --chart-3: #f0d0b8;
+  --chart-4: #b9b3a6;
+  --chart-grid: #efe9dd;
+
+  /* 形状与阴影 */
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 16px;
+  --shadow-1: 0 1px 2px rgba(56, 44, 25, 0.05), 0 6px 20px rgba(56, 44, 25, 0.06);
+  --shadow-2: 0 2px 6px rgba(56, 44, 25, 0.1), 0 14px 40px rgba(56, 44, 25, 0.12);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
+
+  --bg: #1e1d1a;
+  --surface: #292823;
+  --surface-2: #33312a;
+  --border: #3c3930;
+  --border-strong: #4c483b;
+  --text: #ece7dc;
+  --text-2: #b6b0a2;
+  --muted: #8b867b;
+
+  --gold: #d9b77c;
+  --gold-strong: #c39a55;
+  --gold-grad: linear-gradient(135deg, #d59f4e, #a9762b);
+  --gold-soft: #37311f;
+  --gold-pill: #3a3220;
+  --gold-line: #55482c;
+
+  --green: #7cc29d;
+  --green-soft: #22352b;
+  --amber: #d9b262;
+  --amber-soft: #35301f;
+  --red: #e8978d;
+  --red-soft: #3a2622;
+  --track: #35322b;
+  --prog-grad: linear-gradient(90deg, #d59f4e, #c07e33);
+
+  --chart-line: #e0a85a;
+  --chart-bar: #5a4a30;
+  --chart-1: #d59f4e;
+  --chart-2: #a9762b;
+  --chart-3: #6b5428;
+  --chart-4: #6d685b;
+  --chart-grid: #3a372e;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 20px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.35), 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- 主色调预设（设置 › 应用设置 › 主色调） ----------
+ * 默认“铜金”即上方的基础令牌；其余预设只提供 4 个种子色，
+ * 柔和底色 / 药丸 / 描边由 color-mix 从种子色与当前表面色推导。 */
+
+:root[data-accent="amber"] {
+  --ac: #c68a1a;
+  --ac-strong: #a06c0e;
+  --ac-dark: #e3b45c;
+  --ac-dark-strong: #c99b3f;
+}
+:root[data-accent="bronze"] {
+  --ac: #8a6a4a;
+  --ac-strong: #6d5238;
+  --ac-dark: #cdb08c;
+  --ac-dark-strong: #b39671;
+}
+:root[data-accent="terracotta"] {
+  --ac: #b4593b;
+  --ac-strong: #94452a;
+  --ac-dark: #e49474;
+  --ac-dark-strong: #cb7a5b;
+}
+:root[data-accent="rose"] {
+  --ac: #b0606e;
+  --ac-strong: #8f4856;
+  --ac-dark: #e0a0ab;
+  --ac-dark-strong: #c88591;
+}
+:root[data-accent]:not([data-accent="gold"]) {
+  --gold: var(--ac);
+  --gold-strong: var(--ac-strong);
+  --gold-grad: linear-gradient(135deg, color-mix(in srgb, var(--ac) 82%, #fff), var(--ac-strong));
+  --gold-soft: color-mix(in srgb, var(--ac) 9%, var(--surface));
+  --gold-pill: color-mix(in srgb, var(--ac) 16%, var(--surface));
+  --gold-line: color-mix(in srgb, var(--ac) 28%, var(--surface));
+  --prog-grad: linear-gradient(90deg, color-mix(in srgb, var(--ac) 88%, #fff), color-mix(in srgb, var(--ac) 55%, #fff));
+  --chart-line: var(--ac);
+  --chart-bar: color-mix(in srgb, var(--ac) 28%, var(--surface));
+  --chart-1: var(--ac-strong);
+  --chart-2: color-mix(in srgb, var(--ac) 62%, var(--surface));
+  --chart-3: color-mix(in srgb, var(--ac) 30%, var(--surface));
+}
+:root[data-accent]:not([data-accent="gold"])[data-theme="dark"] {
+  --gold: var(--ac-dark);
+  --gold-strong: var(--ac-dark-strong);
+  --gold-grad: linear-gradient(135deg, var(--ac-dark), color-mix(in srgb, var(--ac-dark) 62%, #000));
+  --gold-soft: color-mix(in srgb, var(--ac-dark) 12%, var(--surface));
+  --gold-pill: color-mix(in srgb, var(--ac-dark) 20%, var(--surface));
+  --gold-line: color-mix(in srgb, var(--ac-dark) 34%, var(--surface));
+  --prog-grad: linear-gradient(90deg, var(--ac-dark), color-mix(in srgb, var(--ac-dark) 60%, #000));
+  --chart-line: var(--ac-dark);
+  --chart-bar: color-mix(in srgb, var(--ac-dark) 36%, var(--surface));
+  --chart-1: var(--ac-dark);
+  --chart-2: var(--ac-dark-strong);
+  --chart-3: color-mix(in srgb, var(--ac-dark) 40%, var(--surface));
+}

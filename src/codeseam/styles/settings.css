@@ -1,0 +1,375 @@
+/* 设置页：二级导航分组 + 设置分组 / 行 / 控件。变量见 tokens.css。 */
+
+/* ---------- 二级导航分组 ---------- */
+
+.subnav-label {
+  margin: 14px 0 4px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+.sub-nav nav > .subnav-label:first-child {
+  margin-top: 2px;
+}
+
+/* ---------- 分组与行 ---------- */
+
+.set-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-1);
+  padding: 16px 22px 6px;
+  margin-bottom: 14px;
+}
+.set-group h2 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.1px;
+}
+.set-group-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.set-rows {
+  margin-top: 6px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 62px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.set-rows > .set-row:first-child {
+  border-top: 0;
+}
+.set-text {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.set-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.set-text span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.set-control {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 60%;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.set-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.set-row--stack .set-control {
+  max-width: none;
+}
+.set-row--stack .set-control input {
+  margin: 0;
+}
+.set-value {
+  font-size: 12.5px;
+  color: var(--text-2);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.set-value.mono {
+  font-size: 12px;
+}
+.set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 4px 0 14px;
+}
+.set-note {
+  margin: 0;
+  padding: 10px 0 14px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- 控件 ---------- */
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toggle span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+.toggle.on {
+  background: var(--gold-grad);
+}
+.toggle.on span {
+  transform: translateX(18px);
+}
+.toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.toggle:focus-visible,
+.segmented button:focus-visible,
+.swatch:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.segmented button:hover {
+  color: var(--text);
+}
+.segmented button.selected {
+  background: var(--surface);
+  color: var(--gold-strong);
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgba(56, 44, 25, 0.14);
+}
+
+.swatches {
+  display: flex;
+  gap: 10px;
+}
+.swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.swatch.selected {
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+.select {
+  min-width: 132px;
+  height: 32px;
+  padding: 0 28px 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.set-input {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+.set-input input {
+  flex: 1;
+}
+
+/* ---------- 列表型内容（日志 / 快捷键 / 许可证 / 帮助） ---------- */
+
+.set-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.set-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.set-list li:first-child {
+  border-top: 0;
+}
+.set-list .when {
+  flex: none;
+  width: 92px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.set-list .what {
+  min-width: 0;
+  flex: 1;
+}
+.set-list .what small {
+  margin-top: 1px;
+}
+.set-empty {
+  margin: 0;
+  padding: 22px 0 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.kbd {
+  display: inline-flex;
+  gap: 4px;
+}
+.kbd kbd {
+  min-width: 24px;
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--text-2);
+}
+.license-text {
+  max-height: 260px;
+  overflow: auto;
+  margin: 6px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font: 11.5px/1.65 "Cascadia Mono", Consolas, monospace;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+.faq {
+  border-top: 1px solid var(--border);
+}
+.faq:first-of-type {
+  border-top: 0;
+}
+.faq summary {
+  padding: 12px 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.faq p {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-2);
+}
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 8px;
+}
+.chip {
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip.selected {
+  border-color: var(--gold-line);
+  background: var(--gold-pill);
+  color: var(--gold-strong);
+  font-weight: 650;
+}
+.dep-grid {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 14px;
+}
+.dep-grid > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.dep-grid span {
+  color: var(--muted);
+  text-align: right;
+}
+
+.log-kind {
+  flex: none;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.log-kind--connect {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.log-kind--warn {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.log-kind--config,
+.log-kind--check {
+  background: var(--gold-soft);
+  color: var(--gold-strong);
+}

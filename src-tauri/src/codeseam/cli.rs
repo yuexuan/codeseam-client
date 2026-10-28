@@ -11,12 +11,14 @@ const FIELDS: &[&str] = &[
     "ANTHROPIC_API_KEY",
 ];
 
-fn path() -> Result<PathBuf, String> {
-    let root = std::env::var_os("CLAUDE_CONFIG_DIR")
+pub fn config_dir() -> Result<PathBuf, String> {
+    std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
         .or_else(|| dirs::home_dir().map(|p| p.join(".claude")))
-        .ok_or("找不到 Claude 配置目录")?;
-    Ok(root.join("settings.json"))
+        .ok_or_else(|| "找不到 Claude 配置目录".into())
+}
+fn path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("settings.json"))
 }
 fn load(p: &PathBuf) -> Result<Value, String> {
     if !p.exists() {
@@ -136,6 +138,38 @@ pub fn detect() -> Option<String> {
         .find(|s| s.ends_with(".exe") || s.ends_with(".cmd"))
         .map(str::to_owned)
 }
+/// 为控制台页面读取的信息。此函数只返回环境变量名称和数量，不会将变量值（包括受管令牌）传给界面。
+pub fn info() -> Value {
+    let exe = detect();
+    let version = exe.as_deref().and_then(|e| {
+        let out = hidden(e).arg("--version").output().ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+            .filter(|v| !v.is_empty())
+    });
+    let settings = path().ok();
+    let value = settings
+        .as_ref()
+        .and_then(|p| load(p).ok())
+        .unwrap_or_else(|| json!({}));
+    let env = value["env"].as_object();
+    let model = env
+        .and_then(|e| e.get("ANTHROPIC_MODEL"))
+        .or_else(|| value.get("model"))
+        .and_then(Value::as_str);
+    let timeout_ms = env
+        .and_then(|e| e.get("API_TIMEOUT_MS"))
+        .and_then(|v| v.as_str().and_then(|s| s.parse::<u64>().ok()).or(v.as_u64()));
+    json!({
+        "version": version,
+        "settings_path": settings.as_ref().map(|p| p.display().to_string()),
+        "settings_exists": settings.as_ref().is_some_and(|p| p.exists()),
+        "model": model,
+        "timeout_ms": timeout_ms,
+        "env_count": env.map_or(0, |e| e.len()),
+    })
+}
 pub fn hidden(program: &str) -> Command {
     let mut c = Command::new(program);
     #[cfg(windows)]
@@ -145,12 +179,19 @@ pub fn hidden(program: &str) -> Command {
     }
     c
 }
-pub fn launch(port: u16, assigned_proxy: Option<&str>) -> Result<std::process::Child, String> {
+pub fn launch(
+    port: u16,
+    assigned_proxy: Option<&str>,
+    work_dir: &str,
+) -> Result<std::process::Child, String> {
     if !configured(port) {
         return Err("请先确认配置 localhost；配置漂移时禁止启动".into());
     }
     let assigned_proxy = assigned_proxy.ok_or("缺少受管代理，已拒绝启动以避免直连降级")?;
     let exe = detect().ok_or("未检测到 Claude Code，请先安装官方 CLI")?;
+    if !work_dir.is_empty() && !std::path::Path::new(work_dir).is_dir() {
+        return Err("工作目录不存在，请在设置 › 工作目录中重新选择".into());
+    }
     // Launch a visible terminal only for the CLI the user explicitly starts.
     let mut c = Command::new("powershell.exe");
     c.args([
@@ -177,6 +218,9 @@ pub fn launch(port: u16, assigned_proxy: Option<&str>) -> Result<std::process::C
         "no_proxy",
     ] {
         c.env_remove(name);
+    }
+    if !work_dir.is_empty() {
+        c.current_dir(work_dir);
     }
     c.env(
         "ANTHROPIC_BASE_URL",

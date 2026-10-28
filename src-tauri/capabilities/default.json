@@ -21,6 +21,7 @@
     "core:window:allow-unminimize",
     "core:window:allow-set-focus",
     "core:window:allow-close",
+    "core:webview:allow-set-webview-zoom",
     "process:allow-restart"
   ]
 }

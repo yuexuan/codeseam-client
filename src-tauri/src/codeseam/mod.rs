@@ -1,13 +1,14 @@
 //! P1 entry point. Upstream provider import/export and update startup are not run.
 mod cli;
 mod network;
+mod shell;
 mod vault;
 
 use crate::proxy::{self, AppTarget, ProxyControl, ProxyHandle, ProxyRuntimeConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 const SESSION: &str = "session.dpapi";
 const PORT: u16 = 18899;
@@ -33,6 +34,7 @@ struct Desktop {
     control: tokio::sync::Mutex<ProxyControl>,
     proxy: ProxyHandle,
     client: reqwest::Client,
+    prefs: std::sync::Mutex<shell::Prefs>,
 }
 impl Desktop {
     fn new() -> Self {
@@ -41,6 +43,7 @@ impl Desktop {
             inner: tokio::sync::Mutex::new(Runtime::default()),
             control: tokio::sync::Mutex::new(ProxyControl::new(proxy.clone())),
             proxy,
+            prefs: std::sync::Mutex::new(shell::load()),
             client: reqwest::Client::builder()
                 .no_proxy()
                 .redirect(reqwest::redirect::Policy::none())
@@ -242,7 +245,8 @@ async fn cs_resume(state: State<'_, Desktop>) -> Result<Value, String> {
             let id = s.service_id;
             r.session = Some(s);
             state.services(&mut r).await?;
-            if let Some(id) = id {
+            let auto_connect = state.prefs.lock().unwrap().auto_connect;
+            if let Some(id) = id.filter(|_| auto_connect) {
                 state.activate(&mut r, id).await?;
             }
         }
@@ -285,8 +289,39 @@ async fn cs_status(state: State<'_, Desktop>) -> Result<Value, String> {
     Ok(status(&state, &mut r))
 }
 
+/// 已保存的客户端偏好设置，以及设置页展示的只读信息。
+fn prefs_view(prefs: &shell::Prefs) -> Value {
+    let mut v = serde_json::to_value(prefs).unwrap_or_else(|_| json!({}));
+    v["tray"] = json!(shell::tray_ready());
+    v["data_dir"] = json!(vault::dir().ok().map(|p| p.display().to_string()));
+    v
+}
 #[tauri::command]
-async fn cs_usage(state: State<'_, Desktop>, start: String, end: String) -> Result<Value, String> {
+fn cs_prefs_get(state: State<'_, Desktop>) -> Value {
+    prefs_view(&state.prefs.lock().unwrap())
+}
+#[tauri::command]
+fn cs_prefs_set(state: State<'_, Desktop>, prefs: shell::Prefs) -> Result<Value, String> {
+    let prefs = shell::checked(prefs)?;
+    shell::save(&prefs)?;
+    *state.prefs.lock().unwrap() = prefs;
+    Ok(prefs_view(&state.prefs.lock().unwrap()))
+}
+/// 在资源管理器中打开固定目录之一（`claude`、`data`、`work` 或 `license`）；WebView 不会传入路径。
+#[tauri::command]
+fn cs_open_path(app: AppHandle, state: State<'_, Desktop>, kind: String) -> Result<(), String> {
+    let prefs = state.prefs.lock().unwrap().clone();
+    shell::reveal(&shell::folder(&app, &kind, &prefs)?)
+}
+
+#[tauri::command]
+async fn cs_cli_info() -> Result<Value, String> {
+    tokio::task::spawn_blocking(cli::info)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn valid_range(start: &str, end: &str) -> Result<(), String> {
     let valid = |s: &str| {
         s.len() == 10
             && s.bytes().enumerate().all(|(i, b)| {
@@ -297,9 +332,15 @@ async fn cs_usage(state: State<'_, Desktop>, start: String, end: String) -> Resu
                 }
             })
     };
-    if !valid(&start) || !valid(&end) || start > end {
+    if !valid(start) || !valid(end) || start > end {
         return Err("请选择有效日期范围".into());
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn cs_usage(state: State<'_, Desktop>, start: String, end: String) -> Result<Value, String> {
+    valid_range(&start, &end)?;
     let mut r = state.inner.lock().await;
     let s = r.session.as_mut().ok_or("请先登录")?;
     state.renew(s, false).await?;
@@ -310,6 +351,67 @@ async fn cs_usage(state: State<'_, Desktop>, start: String, end: String) -> Resu
             None,
         )
         .await
+}
+
+/// 每页读取的请求记录数量；最多读取 `REPORT_PAGES` 页。
+const REPORT_PAGE_SIZE: usize = 1000;
+const REPORT_PAGES: usize = 5;
+
+/// 用量页面使用的报告，包含汇总统计、每日趋势、模型分布和当前用户的请求记录。
+/// 请求记录只保留界面所需字段，不会将 IP 地址、用户代理或端点详情传给 WebView。
+#[tauri::command]
+async fn cs_usage_report(
+    state: State<'_, Desktop>,
+    start: String,
+    end: String,
+) -> Result<Value, String> {
+    valid_range(&start, &end)?;
+    let mut r = state.inner.lock().await;
+    let s = r.session.as_mut().ok_or("请先登录")?;
+    state.renew(s, false).await?;
+    let q = format!("start_date={start}&end_date={end}");
+    let stats = state.api(s, &format!("/usage/stats?{q}"), None).await?;
+    let snap = state
+        .api(
+            s,
+            &format!("/usage/dashboard/snapshot-v2?{q}&granularity=day&include_trend=true&include_model_stats=true"),
+            None,
+        )
+        .await?;
+    let mut logs: Vec<Value> = Vec::new();
+    let mut total: u64 = 0;
+    for page in 1..=REPORT_PAGES {
+        let p = state
+            .api(
+                s,
+                &format!("/usage?{q}&page={page}&page_size={REPORT_PAGE_SIZE}"),
+                None,
+            )
+            .await?;
+        total = p["total"].as_u64().unwrap_or(0);
+        if let Some(items) = p["items"].as_array() {
+            logs.extend(items.iter().map(|i| {
+                json!({
+                    "id": i["id"], "request_id": i["request_id"], "session_id": i["session_id"],
+                    "model": i["model"], "input_tokens": i["input_tokens"],
+                    "output_tokens": i["output_tokens"],
+                    "cache_creation_tokens": i["cache_creation_tokens"],
+                    "cache_read_tokens": i["cache_read_tokens"],
+                    "total_cost": i["total_cost"], "actual_cost": i["actual_cost"],
+                    "duration_ms": i["duration_ms"], "first_token_ms": i["first_token_ms"],
+                    "stream": i["stream"], "created_at": i["created_at"]
+                })
+            }));
+        }
+        if page as u64 >= p["pages"].as_u64().unwrap_or(1) {
+            break;
+        }
+    }
+    Ok(json!({
+        "start": start, "end": end, "stats": stats, "trend": snap["trend"],
+        "models": snap["models"], "logs": logs, "logs_total": total,
+        "truncated": total > logs.len() as u64
+    }))
 }
 
 #[tauri::command]
@@ -426,7 +528,8 @@ async fn cs_launch(state: State<'_, Desktop>) -> Result<(), String> {
         r.network = None;
         return Err("网络诊断存在会导致受保护 API 直连的失败项；已保持 Kill-Switch 拒绝状态，请先修复并重新检测".into());
     }
-    r.child = Some(cli::launch(PORT, launch_proxy.as_deref())?);
+    let work_dir = state.prefs.lock().unwrap().work_dir.clone();
+    r.child = Some(cli::launch(PORT, launch_proxy.as_deref(), &work_dir)?);
     Ok(())
 }
 #[tauri::command]
@@ -472,17 +575,44 @@ async fn cs_logout(state: State<'_, Desktop>) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
+            shell::show_main(app);
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(Desktop::new())
+        .setup(|app| {
+            // 托盘图标创建失败时仅禁用“关闭到托盘”，不能阻止客户端启动。
+            if let Err(e) = shell::setup_tray(app.handle()) {
+                eprintln!("[codeseam] tray unavailable: {e}");
+            }
+            if app.state::<Desktop>().prefs.lock().unwrap().start_minimized {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.minimize();
+                }
+            }
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let to_tray = window.state::<Desktop>().prefs.lock().unwrap().close_to_tray;
+                if to_tray && shell::tray_ready() {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             cs_login,
             cs_resume,
             cs_status,
+            cs_cli_info,
+            cs_prefs_get,
+            cs_prefs_set,
+            cs_open_path,
             cs_usage,
+            cs_usage_report,
             cs_open_portal,
             cs_diagnose,
             cs_refresh,
