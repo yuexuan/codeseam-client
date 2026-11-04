@@ -1,5 +1,6 @@
 //! P1 entry point. Upstream provider import/export and update startup are not run.
 mod cli;
+mod environment;
 mod network;
 mod shell;
 mod vault;
@@ -95,6 +96,10 @@ impl Desktop {
     }
     async fn activate(&self, r: &mut Runtime, id: i64) -> Result<(), String> {
         self.stop().await;
+        if r.session.as_ref().and_then(|s| s.service_id).is_some_and(|old| old != id) {
+            stop_child(r);
+            cli::restore()?;
+        }
         r.network = None;
         let s = r.session.as_mut().ok_or("请先登录")?;
         self.renew(s, false).await?;
@@ -205,6 +210,8 @@ async fn cs_login(
 ) -> Result<Value, String> {
     let mut r = state.inner.lock().await;
     state.stop().await;
+    stop_child(&mut r);
+    cli::restore()?;
     r.session = None;
     r.services.clear();
     r.network = None;
@@ -256,7 +263,7 @@ async fn cs_resume(state: State<'_, Desktop>) -> Result<Value, String> {
 // Explicit allowlist: credentials stay in Rust memory, never in React/status/DPAPI.
 fn network_summary(v: &Value) -> Value {
     json!({"revision":v["revision"], "expected_egress":v["expected_egress"],
-        "expires_at":v["expires_at"], "proxy_expires_at":v["proxy_expires_at"],
+        "region_profile":v["region_profile"], "server_egress_status":v["server_egress_status"], "expires_at":v["expires_at"], "proxy_expires_at":v["proxy_expires_at"],
         "protocol":v["proxy"]["protocol"], "egress_verified":false})
 }
 
@@ -451,9 +458,24 @@ pub fn uninstall() -> Result<(), String> {
 #[tauri::command]
 async fn cs_diagnose(state: State<'_, Desktop>) -> Result<network::Report, String> {
     let r = state.inner.lock().await;
-    let context = report_context(&state, &r).ok_or("请先登录并激活服务")?;
+    let context = report_context(&state, &r);
+    let profile = r.network.as_ref().map(|v| v["region_profile"].clone());
     drop(r);
-    Ok(network::diagnose(context).await)
+    let mut report = if let Some(context) = context {
+        network::diagnose(context).await
+    } else {
+        network::Report {
+            generated_at: now(),
+            checks: vec![],
+            can_start: false,
+            api_protection: "unknown".into(),
+            non_api_coverage: "not_covered".into(),
+        }
+    };
+    report
+        .checks
+        .extend(environment::diagnose(profile.as_ref()).await);
+    Ok(report)
 }
 #[tauri::command]
 async fn cs_refresh(state: State<'_, Desktop>) -> Result<Value, String> {
@@ -521,6 +543,13 @@ async fn cs_launch(state: State<'_, Desktop>) -> Result<(), String> {
         .ok_or("请先激活服务")?;
     state.activate(&mut r, id).await?;
     let context = report_context(&state, &r).ok_or("网络配置不可用，已拒绝启动")?;
+    if r.network
+        .as_ref()
+        .is_some_and(|v| v["region_profile"].is_object())
+    {
+        state.stop().await;
+        return Err("SG_PROFILE_NOT_INITIALIZED：尚无已验证的 Claude-SG 独立路由及服务端出口证据，已拒绝启动；请查看环境诊断".into());
+    }
     let launch_proxy = context.assigned_proxy.clone();
     let report = network::diagnose(context).await;
     if !report.can_start {
@@ -596,7 +625,12 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let to_tray = window.state::<Desktop>().prefs.lock().unwrap().close_to_tray;
+                let to_tray = window
+                    .state::<Desktop>()
+                    .prefs
+                    .lock()
+                    .unwrap()
+                    .close_to_tray;
                 if to_tray && shell::tray_ready() {
                     api.prevent_close();
                     let _ = window.hide();
@@ -633,6 +667,9 @@ pub fn run() {
                 tauri::async_runtime::block_on(async {
                     state.stop().await;
                     stop_child(&mut *state.inner.lock().await);
+                    if let Err(error) = cli::restore() {
+                        eprintln!("[codeseam] CLI restore conflict; encrypted backup retained: {error}");
+                    }
                 });
             }
         });

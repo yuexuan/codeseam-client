@@ -21,7 +21,7 @@ export interface Status {
   cli?: string;
   cli_pid?: number;
   local_url: string;
-  network?: { revision: string; expected_egress: string };
+  network?: { revision: string; expected_egress: string; region_profile?: { registration_region: string; region: string; clash_node: string; expected_egress_ipv4: string; version: string } };
   requests?: number;
 }
 

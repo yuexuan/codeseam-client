@@ -113,7 +113,7 @@ export function DiagnosticsPage({ cs, setPage }: { cs: CodeSeam; setPage: (p: Pa
     pending: rows.filter((r) => toneOf(r.check?.status) === "pending").length,
   };
 
-  const canDiagnose = !busy && !!status?.network;
+  const canDiagnose = !busy;
   const diagnose = () => void cs.run("cs_diagnose");
 
   const exportReport = (r: Report) => {
@@ -143,19 +143,19 @@ export function DiagnosticsPage({ cs, setPage }: { cs: CodeSeam; setPage: (p: Pa
     }
   };
 
-  const heroTone: Tone = !report ? "idle" : counts.bad ? "bad" : "ok";
+  const heroTone: Tone = !report ? "idle" : counts.bad ? "bad" : counts.pending ? "pending" : "ok";
   const heroTitle = !report
     ? "尚未检测"
     : counts.bad
       ? "存在阻断问题"
-      : "当前环境可用于 Claude Code";
+      : report.canStart ? "受管 API 启动检查通过" : "环境尚未完成验证";
   const heroSub = !report
-    ? "激活服务后点击“开始检测”。未检测不代表正常。"
+    ? "无需激活服务即可点击“开始检测”。未检测不代表正常。"
     : counts.bad
       ? `${counts.bad} 项检测未通过，受管请求不会被放行，请先处理标红项目。`
       : counts.pending
         ? `未发现阻断问题，建议关注 ${counts.pending} 项待验证项以获得更稳定的体验。`
-        : "未发现阻断问题，所有检测项均正常。";
+        : "已完成本次可适用项目；不代表所有网络路径均受保护。";
 
   const expectedEgress = status?.network?.expected_egress;
   const details: [string, ReactNode][] = [["检查项目", selected.title]];

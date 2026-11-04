@@ -57,6 +57,18 @@ fn matches(v: &Value, b: &Backup) -> bool {
     FIELDS.iter().all(|k| v["env"].get(*k) == b.managed.get(*k))
 }
 
+/// A DPAPI snapshot survives abnormal exit. Never overwrite a conflicting edit.
+pub fn recovery_state() -> &'static str {
+    match backup() {
+        Ok(None) => "clean",
+        Ok(Some(b)) => match load(&b.path) {
+            Ok(v) if matches(&v, &b) => "pending_restore",
+            _ => "conflict",
+        },
+        Err(_) => "conflict",
+    }
+}
+
 pub fn configured(port: u16) -> bool {
     path()
         .and_then(|p| load(&p))

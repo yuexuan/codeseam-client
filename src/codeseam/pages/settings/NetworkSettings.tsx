@@ -20,15 +20,25 @@ export function NetworkSettings({
 }) {
   const { status, report, busy } = cs;
   const [consent, setConsent] = useState(false);
+  const profile = status?.network?.region_profile;
   const loggedIn = !!status?.logged_in;
   const counts = { pass: 0, issue: 0, unknown: 0 };
   for (const c of report?.checks ?? []) {
-    if (c.status === "pass" || c.status === "not_applicable") counts.pass++;
+    if (c.status === "pass") counts.pass++;
     else if (c.status === "fail" || c.status === "warning") counts.issue++;
     else counts.unknown++;
   }
   return (
     <>
+      <SettingGroup title="SG 区域环境" subtitle="注册地区来自服务登记；出口必须分别验证客户端和服务端。">
+        <SettingRow title="注册地区 / 运行地区" desc={`${profile?.registration_region ?? "未登记"} / ${profile?.region ?? "未配置"}`}>
+          <Badge tone="amber">未初始化</Badge>
+        </SettingRow>
+        <SettingRow title="目标 SG 节点" desc={profile?.clash_node ?? "服务尚未指定本机节点"} />
+        <SettingRow title="预期固定出口" desc={profile?.expected_egress_ipv4 ?? "尚未分配"} />
+        <SettingRow title="实际出口" desc={report?.checks.find(c => c.id === "egress_ipv4")?.evidence ?? "尚未验证"} />
+        <SettingRow title="服务端上游出口" desc="尚无服务端实测证据，不能使用客户端检测代替" />
+      </SettingGroup>
       <SettingGroup
         title="保护策略"
         subtitle="以下策略由客户端固定执行，不提供关闭开关——降级为直连会让专属出口失去意义。"
@@ -69,13 +79,13 @@ export function NetworkSettings({
           </>
         ) : (
           <p className="set-empty">
-            {loggedIn ? "本次运行尚未检测，点击下方按钮开始。" : "登录并连接服务后可进行环境检测。"}
+            {loggedIn ? "本次运行尚未检测，点击下方按钮开始。" : "未连接服务也可进行基础本机检测。"}
           </p>
         )}
         <div className="set-actions">
           <Button
             icon={<Stethoscope size={14} />}
-            disabled={busy || !loggedIn}
+            disabled={busy}
             onClick={() => void cs.run("cs_diagnose")}
           >
             立即检测
