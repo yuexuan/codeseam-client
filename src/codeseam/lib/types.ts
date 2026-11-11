@@ -1,6 +1,7 @@
 /** 与 src-tauri 后端命令交换的数据结构（字段以后端序列化为准）。 */
 
 export type PageId = "overview" | "diagnostics" | "claude" | "usage" | "settings";
+export type DiagnosticsTab = "system" | "browser" | "network" | "claude" | "recovery";
 
 export interface Service {
   id: number;
@@ -33,6 +34,9 @@ export interface CliInfo {
   model?: string | null;
   timeout_ms?: number | null;
   env_count: number;
+  settings_readable?: boolean;
+  managed_fields?: Record<string, string>;
+  recovery_state?: "clean" | "pending_restore" | "conflict";
 }
 
 export interface CheckItem {

@@ -54,7 +54,11 @@ export function Titlebar({ cs }: { cs: CodeSeam }) {
           className="close"
           title={cs.prefs?.close_to_tray && cs.prefs.tray ? "最小化到托盘" : "关闭"}
           aria-label="关闭"
-          onClick={() => void win?.close()}
+          onClick={() => {
+            if (cs.diagnosticsBusy) return;
+            if (cs.diagnosticsDirty && !window.confirm("环境配置有未应用的草稿，确认关闭？退出后未保存编辑将丢失。")) return;
+            void win?.close();
+          }}
         >
           <X size={14} />
         </button>

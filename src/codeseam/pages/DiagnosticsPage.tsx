@@ -1,373 +1,112 @@
-import {
-  Activity,
-  ChevronRight,
-  Copy,
-  FileDown,
-  Globe,
-  Layers,
-  ListChecks,
-  Lock,
-  Network,
-  Play,
-  Radio,
-  RotateCw,
-  Route,
-  ScrollText,
-  Server,
-  ShieldAlert,
-  ShieldCheck,
-  SquareTerminal,
-  Stethoscope,
-  Video,
-  Wrench,
-} from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FileDown, FolderOpen, LoaderCircle, MoreHorizontal, Play, ScrollText } from "lucide-react";
 import type { CodeSeam } from "../lib/useCodeSeam";
-import type { CheckItem, PageId, Report } from "../lib/types";
-import { checkText, fullTime } from "../lib/format";
-import { Badge } from "../components/ui/Badge";
+import type { CheckItem, DiagnosticsTab, PageId } from "../lib/types";
+import { fullTime } from "../lib/format";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
+import { HelpTip } from "../components/ui/HelpTip";
+import { SgNode } from "../components/SgNode";
 import { ManagedConfig } from "../components/ManagedConfig";
+import { BrowserEnvironment } from "../components/BrowserEnvironment";
+import { SystemNetwork } from "../components/SystemNetwork";
+import "../styles/diagnostics.css";
 
-type Tone = "ok" | "pending" | "bad" | "idle";
-
-/** 诊断项的展示信息；顺序即列表顺序。后端新增的检测项会追加到末尾并使用后端文案。 */
-const META: Record<string, { title: string; desc: string; icon: ReactNode }> = {
-  proxy: { title: "本地代理", desc: "检测受管代理服务运行状态与配置", icon: <Server /> },
-  config: { title: "Claude Code 配置", desc: "检查受管配置与本地端口是否一致", icon: <SquareTerminal /> },
-  egress_ipv4: { title: "出口 IP", desc: "检测当前网络出口 IP 及预期匹配", icon: <Globe /> },
-  dns: { title: "DNS 泄漏", desc: "检测是否存在 DNS 泄漏风险", icon: <Network /> },
-  egress_ipv6: { title: "IPv6 状态", desc: "检测 IPv6 连接状态与旁路风险", icon: <Route /> },
-  udp: { title: "UDP 路由", desc: "检测 UDP 路径是否在保护范围内", icon: <Radio /> },
-  webrtc: { title: "WebRTC / STUN", desc: "检测 WebRTC 是否泄漏真实 IP", icon: <Video /> },
-  kill_switch: { title: "Kill-Switch", desc: "检测代理断开时的网络保护机制", icon: <Lock /> },
-  non_api: { title: "非 API 流量", desc: "Claude Code 其他联网进程的覆盖范围", icon: <Layers /> },
-};
-const ORDER = Object.keys(META);
-
-const STATUS_TEXT: Record<string, string> = {
-  pass: "正常",
-  fail: "异常",
-  warning: "待处理",
-  unknown: "待验证",
-  not_applicable: "不适用",
-};
-
-const toneOf = (status?: string): Tone =>
-  status === "pass"
-    ? "ok"
-    : status === "fail"
-      ? "bad"
-      : status === "warning" || status === "unknown"
-        ? "pending"
-        : "idle";
-
-const statusLabel = (status?: string) => (status ? (STATUS_TEXT[status] ?? status) : "未检测");
-
-const badgeTone = { ok: "green", pending: "amber", bad: "red", idle: "neutral" } as const;
-
-interface Row {
-  id: string;
-  title: string;
-  desc: string;
-  icon: ReactNode;
-  check?: CheckItem;
-}
-
-/** 环境诊断页：状态结论 + 诊断项目/详情 + 常用操作 + 修复与恢复。 */
+import { TABS, GROUPS, TITLES } from "../lib/diagnostics";
+import { ResultRow, ResultsHeading } from "../components/DiagnosticResults";
 export function DiagnosticsPage({ cs, setPage }: { cs: CodeSeam; setPage: (p: PageId) => void }) {
-  const { status, report, busy, diagMs } = cs;
-  const [picked, setPicked] = useState<string>();
-  const [copied, setCopied] = useState(false);
-  const detailRef = useRef<HTMLElement>(null);
-
-  const rows = useMemo<Row[]>(() => {
-    const byId = new Map((report?.checks ?? []).map((c) => [c.id, c]));
-    const ids = [...ORDER, ...[...byId.keys()].filter((id) => !(id in META))];
-    return ids.map((id) => {
-      const check = byId.get(id);
-      const m = META[id];
-      return {
-        id,
-        title: m?.title ?? check?.label ?? id,
-        desc: m?.desc ?? check?.detail ?? "",
-        icon: m?.icon ?? <Stethoscope />,
-        check,
-      };
-    });
-  }, [report]);
-
-  /** 默认选中首个需要关注的项（失败优先），无则首项。 */
-  const firstIssue =
-    rows.find((r) => toneOf(r.check?.status) === "bad") ??
-    rows.find((r) => toneOf(r.check?.status) === "pending");
-  const selected = rows.find((r) => r.id === picked) ?? firstIssue ?? rows[0];
-  const sel = selected.check;
-  const selTone = toneOf(sel?.status);
-
-  const counts = {
-    bad: rows.filter((r) => toneOf(r.check?.status) === "bad").length,
-    pending: rows.filter((r) => toneOf(r.check?.status) === "pending").length,
+  const { status, report, busy, diagnosticsTab: tab } = cs;
+  const [visited,setVisited] = useState<Set<DiagnosticsTab>>(()=>new Set([tab]));
+  const [more, setMore] = useState(false);
+  const [nodeDirty, setNodeDirty] = useState(false);
+  const [browserDirty, setBrowserDirty] = useState(false);
+  const [systemDirty, setSystemDirty] = useState(false);
+  useEffect(() => { cs.setDiagnosticsDirty(nodeDirty || browserDirty || systemDirty); }, [nodeDirty, browserDirty, systemDirty, cs.setDiagnosticsDirty]);
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const claudeRef = useRef<HTMLDivElement>(null);
+  const locked = busy || cs.diagnosticsBusy || !!cs.scan;
+  const checks = report?.checks ?? [];
+  const byId = new Map(checks.map(c => [c.id, c]));
+  const profile = status?.network?.region_profile;
+  useEffect(() => { void cs.loadCliInfo(); }, [cs.loadCliInfo]);
+  const exportReport = () => {
+    if (!report) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = `codeseam-diagnostics-${report.generatedAt ?? Date.now()}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000); setMore(false);
   };
-
-  const canDiagnose = !busy;
-  const diagnose = () => void cs.run("cs_diagnose");
-
-  const exportReport = (r: Report) => {
-    const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `codeseam-diagnostics-${r.generatedAt ?? Math.floor(Date.now() / 1000)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const locateAdvice = () => {
-    if (!firstIssue) return;
-    setPicked(firstIssue.id);
-    detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  };
-
-  const copyEvidence = async () => {
-    if (!sel?.evidence) return;
-    try {
-      await navigator.clipboard.writeText(sel.evidence);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* 剪贴板不可用时静默忽略，证据仍显示在详情中。 */
-    }
-  };
-
-  const heroTone: Tone = !report ? "idle" : counts.bad ? "bad" : counts.pending ? "pending" : "ok";
-  const heroTitle = !report
-    ? "尚未检测"
-    : counts.bad
-      ? "存在阻断问题"
-      : report.canStart ? "受管 API 启动检查通过" : "环境尚未完成验证";
-  const heroSub = !report
-    ? "无需激活服务即可点击“开始检测”。未检测不代表正常。"
-    : counts.bad
-      ? `${counts.bad} 项检测未通过，受管请求不会被放行，请先处理标红项目。`
-      : counts.pending
-        ? `未发现阻断问题，建议关注 ${counts.pending} 项待验证项以获得更稳定的体验。`
-        : "已完成本次可适用项目；不代表所有网络路径均受保护。";
-
-  const expectedEgress = status?.network?.expected_egress;
-  const details: [string, ReactNode][] = [["检查项目", selected.title]];
-  if (sel) {
-    details.push(["检测结果", <Badge tone={badgeTone[selTone]}>{statusLabel(sel.status)}</Badge>]);
-    if (sel.id === "egress_ipv4" && expectedEgress) details.push(["预期出口", expectedEgress]);
-    if (sel.id === "proxy" && status?.network)
-      details.push(["配置版本", status.network.revision.slice(0, 12)]);
-    if (sel.evidence) details.push(["检测证据", <span className="mono">{sel.evidence}</span>]);
-    if (sel.protected !== undefined)
-      details.push(["保护范围", sel.protected ? "API 请求（失败将阻止启动）" : "仅提示，不阻断启动"]);
-  }
-
-  return (
-    <>
-      <PageHeader
-        title="环境诊断"
-        subtitle="检测本地环境、代理配置、网络连通性与安全性，确保能够稳定、安全地使用 Claude Code。"
-        actions={
-          <Button variant="primary" icon={<Play size={13} />} disabled={!canDiagnose} onClick={diagnose}>
-            开始检测
-          </Button>
-        }
-      />
-
-      <div className="diag-stack">
-        {/* 诊断状况 */}
-        <section className="card diag-card">
-          <div className="diag-head">
-            <Stethoscope />
-            <h2>诊断状况</h2>
-          </div>
-          <div className="diag-hero">
-            <span className={`hero-badge hero-badge--${heroTone}`}>
-              <span>{heroTone === "bad" ? <ShieldAlert /> : <ShieldCheck />}</span>
-            </span>
-            <div className="hero-main">
-              <div className="hero-line">
-                <strong className={`hero-title hero-title--${heroTone}`}>{heroTitle}</strong>
-                {report && (
-                  <>
-                    <Badge tone={badgeTone[toneOf(report.apiProtection)]}>
-                      API 请求：{checkText[report.apiProtection] ?? report.apiProtection}
-                    </Badge>
-                    <Badge tone="amber">非 API 流量：未覆盖</Badge>
-                  </>
-                )}
-              </div>
-              <p>{heroSub}</p>
-            </div>
-            <dl className="hero-meta">
-              <dt>上次检测时间</dt>
-              <dd>{report?.generatedAt ? fullTime(report.generatedAt * 1000) : "—"}</dd>
-              <dt>检测耗时</dt>
-              <dd>{diagMs != null && report ? `${(diagMs / 1000).toFixed(1)} 秒` : "—"}</dd>
-            </dl>
-            <Button
-              className="btn--soft"
-              icon={<RotateCw size={13} />}
-              disabled={!canDiagnose}
-              onClick={diagnose}
-            >
-              重新检测
-            </Button>
-          </div>
-        </section>
-
-        {/* 诊断项目 + 详情 */}
-        <section className="card diag-card diag-split">
-          <div className="diag-list">
-            <div className="diag-head">
-              <ListChecks />
-              <h2>诊断项目</h2>
-            </div>
-            <div className="diag-rows" role="listbox" aria-label="诊断项目">
-              {rows.map((r) => {
-                const tone = toneOf(r.check?.status);
-                return (
-                  <button
-                    key={r.id}
-                    role="option"
-                    aria-selected={r.id === selected.id}
-                    className={`diag-row${r.id === selected.id ? " selected" : ""}`}
-                    onClick={() => setPicked(r.id)}
-                  >
-                    <span className="row-icon">{r.icon}</span>
-                    <span className="row-main">
-                      <strong>{r.title}</strong>
-                      <small>{r.desc}</small>
-                    </span>
-                    <span className={`row-status row-status--${tone}`}>
-                      <i />
-                      {statusLabel(r.check?.status)}
-                    </span>
-                    <ChevronRight className="row-chev" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <aside className="diag-detail" ref={detailRef}>
-            <div className="diag-head">
-              {META[selected.id]?.icon ?? <Stethoscope />}
-              <h2>{selected.title}详情</h2>
-              <span className={`row-status row-status--${selTone} head-status`}>
-                <i />
-                {statusLabel(sel?.status)}
-              </span>
-            </div>
-            <div className={`diag-alert diag-alert--${selTone}`}>
-              {sel ? (
-                <>
-                  <p>{sel.detail}</p>
-                  {sel.remediation && <p>建议：{sel.remediation}</p>}
-                </>
-              ) : (
-                <p>
-                  {report
-                    ? "本次检测没有返回该项结果。"
-                    : "尚未检测此项。点击“开始检测”后将显示证据与建议。未检测不代表正常。"}
-                </p>
-              )}
-            </div>
-            <dl className="diag-kv">
-              {details.map(([k, v]) => (
-                <div key={k}>
-                  <dt>{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
-            </dl>
-            {sel?.evidence && (
-              <Button className="btn--soft" icon={<Copy size={13} />} onClick={() => void copyEvidence()}>
-                {copied ? "已复制" : "复制证据"}
-              </Button>
-            )}
-          </aside>
-        </section>
-
-        {/* 常用操作 */}
-        <section className="card diag-card">
-          <div className="diag-head diag-head--line">
-            <Wrench />
-            <h2>常用操作</h2>
-          </div>
-          <div className="diag-actions">
-            <ActionTile
-              icon={<RotateCw />}
-              title="重新检测"
-              desc="立即重新运行所有检测项"
-              disabled={!canDiagnose}
-              onClick={diagnose}
-            />
-            <ActionTile
-              icon={<FileDown />}
-              title="导出报告"
-              desc="导出诊断结果为本地文件"
-              disabled={!report}
-              onClick={() => report && exportReport(report)}
-            />
-            <ActionTile
-              icon={<Activity />}
-              title="网络修复建议"
-              desc="定位首个需处理项的建议"
-              disabled={!firstIssue}
-              onClick={locateAdvice}
-            />
-            <ActionTile
-              icon={<ScrollText />}
-              title="查看记录"
-              desc="查看活动记录与报告"
-              disabled={busy}
-              onClick={() => {
-                cs.setSettingsTab("logs");
-                setPage("settings");
-              }}
-            />
-          </div>
-        </section>
-
-        <Card
-          title="修复与恢复"
-          subtitle="仅修改受管的 Claude API 字段，保留加密备份；系统 DNS、IPv6 和防火墙不会被此操作修改。"
-        >
-          <ManagedConfig cs={cs} />
+  const missing = (id: string): CheckItem => ({ id, label: TITLES[id] ?? id, status: "not_checked", detail: "尚未检测", });
+  const ids = (group: DiagnosticsTab) => GROUPS[group].filter(id => byId.has(id) || !["windows_environment", "sg_node"].includes(id));
+  const renderChecks = (group: DiagnosticsTab) => [...ids(group), ...(group === "network" ? checks.filter(c => !new Set(Object.values(GROUPS).flat()).has(c.id)).map(c => c.id) : [])].map(id => {
+    let item = byId.get(id) ?? missing(id);
+    if (id === "initialization") item = { ...item, status: "unsupported", detail: "尚未接管 Clash；没有自动初始化或恢复的路由变更。" };
+    return <ResultRow key={id} item={item} time={report?.generatedAt}
+      onConfig={group === "system" ? () => document.getElementById("system-configuration")?.scrollIntoView({behavior:"smooth",block:"start"}) : id === "config" ? () => claudeRef.current?.scrollIntoView({ block: "nearest" }) : id === "sg_profile" || id === "sg_node" ? () => nodeRef.current?.scrollIntoView({ block: "nearest" }) : undefined} />;
+  });
+  const scopedChecks=checks.filter(c=>GROUPS[tab].includes(c.id));
+  const hasResult=scopedChecks.some(c=>!["not_checked","waiting","running"].includes(c.status));
+  const failures = scopedChecks.filter(c => c.status === "fail").length;
+  const pending = scopedChecks.filter(c => ["unknown","warning","reboot_required","interrupted"].includes(c.status)).length;
+  const select = (next: DiagnosticsTab) => { setVisited(v=>new Set([...v,next])); cs.setDiagnosticsTab(next); setMore(false); };
+  return <div className="diagnostics-workspace">
+    <PageHeader title="环境诊断" actions={<>
+      <Button variant="primary" icon={cs.scan?<LoaderCircle size={14} className="check-spin"/>:<Play size={13}/>} disabled={locked} onClick={() => void cs.run("cs_diagnose")}>{cs.scan ? "检测中…" : "检测全部"}</Button>
+      <div className="env-more"><Button aria-label="更多诊断操作" aria-expanded={more} icon={<MoreHorizontal size={16} />} onClick={() => setMore(v => !v)} />
+        {more && <div className="env-more-panel" onKeyDown={e => { if (e.key === "Escape") setMore(false); }}><Button disabled={!report || locked} icon={<FileDown size={14} />} onClick={exportReport}>导出最近报告</Button></div>}</div>
+    </>} />
+    <div className="env-tabs" role="tablist" aria-label="环境诊断分区">
+      {TABS.map((t, index) => {
+        const count = checks.filter(c => GROUPS[t.id].includes(c.id) && (c.status === "fail" || c.status === "warning")).length;
+        return <button key={t.id} id={`env-tab-${t.id}`} role="tab" aria-label={t.label} aria-selected={tab === t.id} aria-controls={`env-panel-${t.id}`} tabIndex={tab === t.id ? 0 : -1}
+          onClick={() => select(t.id)} onKeyDown={e => {
+            if(e.ctrlKey||e.metaKey||e.altKey)return;
+            const next = e.key === "ArrowRight" ? (index + 1) % TABS.length : e.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length : e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : undefined;
+            if (next !== undefined) { e.preventDefault(); select(TABS[next].id); document.getElementById(`env-tab-${TABS[next].id}`)?.focus(); }
+          }}>{t.label}{count > 0 && <span className="env-tab-count">{count}</span>}</button>;
+      })}
+    </div>
+    {(tab!=="browser"||cs.scan)&&<div className="env-summary" role="status" aria-live="polite">
+      <strong>{cs.scan ? `正在检测${TITLES[cs.scan.current??""]??"环境"} · ${cs.scan.done} / ${cs.scan.ids.length} 项完成` : !hasResult?"尚未检测此分区":`检测完成 · ${scopedChecks.filter(c=>c.status==="pass").length} 项通过${failures?`，${failures} 项未通过`:""}${pending?`，${pending} 项需配置`:""}`}</strong>
+      {!cs.scan&&hasResult&&report?.generatedAt&&<span>上次检测：{fullTime(report.generatedAt*1000)}</span>}
+    </div>}
+    {cs.scan&&<progress className="scan-progress" aria-label="检测进度" max={cs.scan.ids.length} value={cs.scan.done}/>}
+    {TABS.filter(t=>visited.has(t.id)||t.id===tab).map(t => <div key={t.id} id={`env-panel-${t.id}`} role="tabpanel" aria-labelledby={`env-tab-${t.id}`} tabIndex={0} hidden={tab !== t.id} className="env-panel">
+      {t.id === "system" && <>
+        <Card className="diagnostic-section" title="检测结果"><ResultsHeading/>{renderChecks("system")}</Card>
+        <div id="system-configuration"><SystemNetwork cs={cs} onDirty={setSystemDirty}/></div>
+      </>}
+      {t.id === "browser" && <BrowserEnvironment cs={cs} onDirty={setBrowserDirty} />}
+      {t.id === "network" && <>
+        <Card className="diagnostic-section" title="检测结果"><ResultsHeading/>{renderChecks("network")}</Card>
+        <details className="env-secondary-details"><summary>服务下发的区域配置</summary><dl className="env-facts">
+          <div><dt>注册 / 运行地区</dt><dd>{profile?.registration_region || "未登记"} / {profile?.region || "未下发"}</dd></div>
+          <div><dt>指定节点</dt><dd>{profile?.clash_node || "未分配"}</dd></div><div><dt>预期固定出口</dt><dd>{profile?.expected_egress_ipv4 || status?.network?.expected_egress || "未分配"}</dd></div>
+          <div><dt>来源 / 配置版本</dt><dd>{status?.network ? `服务端下发 / ${profile?.version || status.network.revision}` : "未取得服务配置"}</dd></div>
+        </dl></details>
+        <div ref={nodeRef}><Card className="diagnostic-section" title="配置修改" action={<HelpTip label="本地节点">配置和测试是独立操作；测试只使用已保存节点。未应用草稿在切换分区后保留。</HelpTip>}>
+          <SgNode disabled={locked} onDirty={setNodeDirty} onBusy={cs.setDiagnosticsBusy} onSaved={() => { cs.log("config", "本地节点配置已更新"); return cs.scanDiagnostics(["local_sg_node"]); }} />
+        </Card></div>
+      </>}
+      {t.id === "claude" && <>
+        <Card className="diagnostic-section" title="检测结果"><ResultsHeading/>
+          <ResultRow item={{ id: "cli_executable", label: "可执行程序与版本", status: status?.cli && cs.cliInfo?.version ? "pass" : "unknown", detail: `${status?.cli ?? "未检测到程序"} · ${cs.cliInfo?.version ?? "版本未读取"}` }} />
+          {renderChecks("claude")}
+          <ResultRow item={{ id: "preflight", label: "启动前验证", status: report?.apiProtection ?? "unknown", detail: !report ? "尚未进行启动前检测" : report.apiProtection === "skipped" ? "尚未接入受管 API 服务，启动条件待验证" : report.canStart ? "当前报告允许受管 API 启动；实际启动时仍重新检测。" : "当前报告尚不满足受管启动条件" }} />
         </Card>
-      </div>
-    </>
-  );
-}
-
-function ActionTile({
-  icon,
-  title,
-  desc,
-  disabled,
-  onClick,
-}: {
-  icon: ReactNode;
-  title: string;
-  desc: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button className="action-tile" disabled={disabled} onClick={onClick}>
-      <span className="tile-icon tile-icon--gold">{icon}</span>
-      <span>
-        <strong>{title}</strong>
-        <small>{desc}</small>
-      </span>
-    </button>
-  );
+        <div ref={claudeRef}><Card title="受管配置"><ManagedConfig cs={cs} /></Card></div>
+        <Card title="启动与会话"><Button disabled={locked} onClick={() => setPage("claude")}>前往 Claude Code 控制台</Button></Card>
+      </>}
+      {t.id === "recovery" && <>
+        <Card title="诊断资料"><div className="actions"><Button disabled={!report || locked} icon={<FileDown size={14} />} onClick={exportReport}>导出最近报告</Button>
+          <Button disabled={locked} icon={<FolderOpen size={14} />} onClick={() => void cs.run("cs_open_path", { kind: "claude" })}>打开配置目录</Button>
+          <Button disabled={locked} icon={<ScrollText size={14} />} onClick={() => { cs.setSettingsTab("logs"); setPage("settings"); }}>查看全部活动记录</Button></div>
+          <div className="env-activity">{cs.activity.slice(0, 5).map((ev, i) => <div key={`${ev.ts}-${i}`}><time>{fullTime(ev.ts)}</time><span>{ev.title}</span></div>)}{!cs.activity.length && <p>暂无活动记录</p>}</div>
+        </Card>
+        <Card title="配置恢复">{renderChecks("recovery")}<ManagedConfig cs={cs} restoreOnly /></Card>
+        <SystemNetwork cs={cs} onDirty={setSystemDirty} recoveryOnly/>
+        <Card title="其他恢复对象"><dl className="env-facts"><div><dt>系统网络</dt><dd>IPv6 与 DNS 的原配置可在上方恢复。</dd></div><div><dt>Clash 自动接管</dt><dd>暂不支持；没有可恢复的自动接管变更。</dd></div></dl></Card>
+      </>}
+    </div>)}
+  </div>;
 }

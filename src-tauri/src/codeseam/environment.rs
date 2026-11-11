@@ -1,4 +1,4 @@
-//! Read-only Windows/CFW evidence. No controller mutation or subscription writes.
+//! 只读取 Windows/CFW 环境信息，不修改控制器配置或订阅内容。
 use super::network::Check;
 use serde_json::Value;
 use std::time::Duration;
@@ -13,7 +13,7 @@ fn item(id: &str, label: &str, status: &str, detail: impl Into<String>) -> Check
         remediation: None,
     }
 }
-// Only scalar values at the root are read. Reject ambiguous/remote controllers.
+// 只读取根对象中的标量值；拒绝信息不明确或位于远程的控制器。
 fn scalar(text: &str, key: &str) -> Option<String> {
     let prefix = format!("{key}:");
     let mut values = text.lines().filter_map(|line| line.strip_prefix(&prefix));
@@ -77,6 +77,17 @@ async fn clash(profile: Option<&Value>) -> Vec<Check> {
             version["version"].as_str().unwrap_or("unknown")
         ),
     ));
+    let tun = match get("/configs").send().await {
+        Ok(r) if r.status().is_success() => r.json::<Value>().await.ok(),
+        _ => None,
+    };
+    let adapters = tokio::task::spawn_blocking(|| {
+        super::cli::hidden("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command",
+            "Get-NetAdapter -IncludeHidden -ErrorAction Stop | Select-Object Name,InterfaceDescription,Status | ConvertTo-Json -Compress"])
+            .output().ok().filter(|o| o.status.success())
+            .and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
+    }).await.ok().flatten();
+    out.push(tun_check(tun.as_ref(), adapters.as_ref()));
     let proxies = match get("/proxies").send().await {
         Ok(r) if r.status().is_success() => r.json::<Value>().await.ok(),
         _ => None,
@@ -126,39 +137,145 @@ async fn clash(profile: Option<&Value>) -> Vec<Check> {
     out
 }
 
+// 仅凭控制器开关状态，无法证明 Windows 已创建对应的网络接口。
+fn tun_check(config: Option<&Value>, adapters: Option<&Value>) -> Check {
+    let enabled = config.and_then(|v| v["tun"]["enable"].as_bool());
+    let device = config
+        .and_then(|v| v["tun"]["device"].as_str())
+        .unwrap_or("");
+    let rows: Vec<&Value> = match adapters {
+        Some(Value::Array(rows)) => rows.iter().collect(),
+        Some(row) if row.is_object() => vec![row],
+        _ => vec![],
+    };
+    let active = rows.iter().any(|a| {
+        let name = a["Name"].as_str().unwrap_or("");
+        let description = a["InterfaceDescription"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase();
+        a["Status"] == "Up"
+            && ((!device.is_empty() && name.eq_ignore_ascii_case(device))
+                || description.contains("clash tunnel")
+                || description.contains("mihomo")
+                || description.contains("wintun")
+                || description.contains("meta tunnel"))
+    });
+    let (status, detail) = match enabled {
+        Some(false) => (
+            "warning",
+            "运行中内核 tun.enable=false；界面开关可能未应用，请检查代理软件运行配置",
+        ),
+        Some(true) if active => (
+            "pass",
+            "运行中内核已启用 TUN，且匹配的 Windows 网卡已连接；不代表所有请求均已接管",
+        ),
+        Some(true) => (
+            "unknown",
+            "运行中内核已启用 TUN，但尚未确认匹配的 Windows 网卡已连接",
+        ),
+        None => ("unknown", "未取得运行中内核 TUN 配置，无法确认启用状态"),
+    };
+    let mut check = item("tun", "TUN 网卡", status, detail);
+    check.evidence = Some(
+        serde_json::json!({"enabled":enabled,"device":device,"adapters":adapters}).to_string(),
+    );
+    check
+}
+
 pub async fn diagnose(profile: Option<&Value>) -> Vec<Check> {
-    let mut out = clash(profile).await;
+    diagnose_selected(profile, None).await
+}
+pub async fn diagnose_one(profile: Option<&Value>, id: &str) -> Check {
+    diagnose_selected(profile, Some(id))
+        .await
+        .into_iter()
+        .find(|c| c.id == id)
+        .unwrap_or_else(|| {
+            item(
+                id,
+                id,
+                "unknown",
+                "检测未取得结果，请检查配置；无法确认运行状态",
+            )
+        })
+}
+async fn diagnose_selected(profile: Option<&Value>, selected: Option<&str>) -> Vec<Check> {
+    let mut out = if selected.is_none_or(|id| {
+        matches!(
+            id,
+            "clash" | "clash_nodes" | "clash_policy" | "sg_node" | "tun"
+        )
+    }) {
+        clash(profile).await
+    } else {
+        vec![]
+    };
+    if selected.is_none_or(|id| id == "tun") && !out.iter().any(|c| c.id == "tun") {
+        out.push(tun_check(None, None));
+    }
     let recovery = super::cli::recovery_state();
-    out.push(item("config_recovery", "Claude 配置快照与恢复", if recovery == "clean" { "not_applicable" } else { "unknown" }, match recovery { "clean" => "没有待恢复的 Claude 配置快照", "pending_restore" => "存在 DPAPI 配置快照；若上次异常退出，可通过恢复入口仅还原受管字段", _ => "配置快照与当前字段冲突或不可读；停止覆盖，保留加密备份" }));
-    let local = tokio::task::spawn_blocking(|| {
-        super::cli::hidden("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", r#"$ErrorActionPreference='Stop'; $p=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'; [pscustomobject]@{timezone=(Get-TimeZone).Id;systemProxyEnabled=$p.ProxyEnable;systemProxy=$p.ProxyServer;tun=@(Get-NetAdapter | Where-Object {$_.InterfaceDescription -match 'Clash Tunnel' -and $_.Status -eq 'Up'}).Count;ipv6DefaultRoutes=@(Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '::/0' -ErrorAction SilentlyContinue).Count;ipv6Enabled=@(Get-NetAdapterBinding -ComponentID ms_tcpip6 | Where-Object Enabled).Count;dns=@(Get-DnsClientServerAddress | Where-Object {$_.ServerAddresses.Count -gt 0} | ForEach-Object {$_.ServerAddresses})} | ConvertTo-Json -Compress"#]).output().ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
-    }).await.ok().flatten();
+    out.push(item(
+        "config_recovery",
+        "Claude 配置快照与恢复",
+        if recovery == "clean" {
+            "not_applicable"
+        } else {
+            "unknown"
+        },
+        match recovery {
+            "clean" => "没有待恢复的 Claude 配置快照",
+            "pending_restore" => {
+                "存在 DPAPI 配置快照；若上次异常退出，可通过恢复入口仅还原受管字段"
+            }
+            _ => "配置快照与当前字段冲突或不可读；停止覆盖，保留加密备份",
+        },
+    ));
+    let local = if selected.is_none_or(|id| {
+        matches!(
+            id,
+            "timezone"
+                | "system_proxy"
+                | "tun"
+                | "local_ipv6"
+                | "local_dns"
+                | "windows_environment"
+        )
+    }) {
+        tokio::task::spawn_blocking(|| {
+        super::cli::hidden("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", r#"$ErrorActionPreference='Stop'; $p=Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'; [pscustomobject]@{timezone=(Get-TimeZone).Id;systemProxyEnabled=$p.ProxyEnable;systemProxy=$p.ProxyServer;ipv6DefaultRoutes=@(Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '::/0' -ErrorAction SilentlyContinue).Count;ipv6Enabled=@(Get-NetAdapterBinding -ComponentID ms_tcpip6 | Where-Object Enabled).Count;dns=@(Get-DnsClientServerAddress | Where-Object {$_.ServerAddresses.Count -gt 0} | ForEach-Object {$_.ServerAddresses})} | ConvertTo-Json -Compress"#]).output().ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice::<Value>(&o.stdout).ok())
+    }).await.ok().flatten()
+    } else {
+        None
+    };
     if let Some(v) = local {
         for (id, label, status, detail) in [
             (
                 "timezone",
-                "Windows 时区（仅检测）",
-                "pass",
+                "系统时区",
+                if v["timezone"] == "China Standard Time"
+                    || v["timezone"] == "Singapore Standard Time"
+                {
+                    "pass"
+                } else {
+                    "warning"
+                },
                 format!("{}；SG 与中国均 UTC+8，不修改系统时区", v["timezone"]),
             ),
             (
                 "system_proxy",
                 "当前系统代理",
-                "unknown",
+                if v["systemProxyEnabled"] == 1
+                    && v["systemProxy"].as_str().is_some_and(|s| !s.is_empty())
+                {
+                    "pass"
+                } else {
+                    "warning"
+                },
                 format!(
                     "启用={}，地址={}；系统代理不证明受管请求命中",
                     v["systemProxyEnabled"], v["systemProxy"]
                 ),
-            ),
-            (
-                "tun",
-                "Clash TUN 网卡",
-                if v["tun"].as_u64().unwrap_or(0) > 0 {
-                    "pass"
-                } else {
-                    "unknown"
-                },
-                "网卡状态仅证明适配器启用，不证明具体请求经过隧道".into(),
             ),
             (
                 "local_ipv6",
@@ -195,7 +312,7 @@ pub async fn diagnose(profile: Option<&Value>) -> Vec<Check> {
         if profile.is_some_and(|p| p.is_object()) {
             "unknown"
         } else {
-            "fail"
+            "unknown"
         },
         profile
             .filter(|p| p.is_object())
@@ -209,7 +326,17 @@ pub async fn diagnose(profile: Option<&Value>) -> Vec<Check> {
                     p["version"]
                 )
             })
-            .unwrap_or_else(|| "服务未下发 SG Profile；基础本机检测仍可运行".into()),
+            .unwrap_or_else(|| {
+                if super::sg::summary()
+                    .ok()
+                    .is_some_and(|s| s["configured"] == true)
+                {
+                    "已配置本地 SS 节点；可在此测试出口。云端区域策略尚未同步，不影响本地节点测试"
+                        .into()
+                } else {
+                    "未配置 SG 节点；在下方导入 SS 链接即可开始本地出口测试，无需云端登录".into()
+                }
+            }),
     ));
     out.push(item(
         "server_egress",
@@ -251,11 +378,16 @@ mod tests {
     #[test]
     #[ignore = "read-only live Windows/CFW evidence"]
     fn live_environment() {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         let checks = rt.block_on(diagnose(None));
         println!("{}", serde_json::to_string_pretty(&checks).unwrap());
         assert!(checks.iter().any(|c| c.id == "clash"));
-        assert!(checks.iter().any(|c| c.id == "server_egress" && c.status == "unknown"));
+        assert!(checks
+            .iter()
+            .any(|c| c.id == "server_egress" && c.status == "unknown"));
     }
     #[test]
     fn rejects_duplicate_or_nested_controller() {
@@ -265,5 +397,30 @@ mod tests {
         );
         assert_eq!(scalar("secret: a\nsecret: b", "secret"), None);
         assert_eq!(scalar("secret: 'value'", "secret"), Some("value".into()));
+    }
+}
+
+#[cfg(test)]
+mod tun_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn runtime_tun_requires_enabled_core_and_connected_interface() {
+        let adapter =
+            json!({"Name":"custom-tun","InterfaceDescription":"Virtual adapter","Status":"Up"});
+        let enabled = json!({"tun":{"enable":true,"device":"custom-tun"}});
+        assert_eq!(tun_check(Some(&enabled), Some(&adapter)).status, "pass");
+        let disabled = json!({"tun":{"enable":false}});
+        assert_eq!(tun_check(Some(&disabled), Some(&adapter)).status, "warning");
+        assert_eq!(
+            tun_check(Some(&enabled), Some(&json!([]))).status,
+            "unknown"
+        );
+        assert_eq!(tun_check(None, Some(&adapter)).status, "unknown");
+        let disconnected = json!([{"Name":"custom-tun","Status":"Disconnected"}]);
+        assert_eq!(
+            tun_check(Some(&enabled), Some(&disconnected)).status,
+            "unknown"
+        );
     }
 }

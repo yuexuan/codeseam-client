@@ -27,6 +27,8 @@ body {
 
 .shell {
   height: 100vh;
+  /* 在原生阴影关闭时保留清晰、随主题变化的窗口轮廓。 */
+  border: 1px solid var(--border-strong);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -173,6 +175,48 @@ body {
   color: #fff;
   font-size: 14px;
   font-weight: 650;
+}
+.user-card--action {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+}
+.user-card--action:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.user-card-arrow { margin-left: auto; flex: none; color: var(--muted); }
+.login-dialog {
+  width: min(440px, calc(100vw - 40px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+}
+.login-dialog::backdrop { background: rgba(30, 28, 23, 0.32); }
+.login-dialog-heading { display: flex; align-items: center; justify-content: space-between; }
+.login-dialog-icon {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border-radius: var(--radius-m); background: var(--gold-soft); color: var(--gold);
+}
+.login-dialog h2 { margin: 16px 0 6px; font-size: 22px; }
+.login-dialog p { margin: 0 0 22px; color: var(--text-2); }
+.login-dialog-form { display: grid; gap: 16px; }
+.login-dialog-form label { display: grid; gap: 6px; }
+.login-dialog-form input { width: 100%; min-width: 0; }
+.login-dialog-form > .btn { width: 100%; justify-content: center; }
+.login-connection summary { cursor: pointer; color: var(--text-2); }
+.login-connection label { margin-top: 12px; }
+.login-dialog-footer {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 12px;
 }
 .user-card-meta {
   min-width: 0;
@@ -876,6 +920,26 @@ input[type="checkbox"] {
   background: var(--green-soft);
   border-left: 3px solid var(--green);
 }
+.app-toast {
+  position: fixed;
+  z-index: 100;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 48px);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 0;
+  box-shadow: var(--shadow-2);
+}
+.app-toast button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
 /* ---------- 环境诊断页 ---------- */
 
 .btn--soft {
@@ -1021,13 +1085,20 @@ input[type="checkbox"] {
 .diag-split {
   display: grid;
   grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
+  height: clamp(320px, 62vh, 680px);
 }
 .diag-list {
   border-right: 1px solid var(--border);
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .diag-rows {
   padding: 8px 8px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .diag-row {
   position: relative;
@@ -1155,11 +1226,20 @@ input[type="checkbox"] {
 
 .diag-detail {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: 20px;
 }
 .diag-detail .diag-head {
   padding-bottom: 12px;
 }
+.diag-detail--node > .diag-alert:not(.sg-node),
+.diag-detail--node > .diag-kv { display: none; }
+.sg-node h3 { margin: 0 0 8px; }
+.sg-node .login-dialog-form { gap: 10px; margin-top: 12px; }
+.sg-node .login-dialog-form label { margin: 0; }
+.sg-node .actions { margin-top: 12px; }
 .diag-detail > .btn {
   margin: 14px 22px 0;
 }
@@ -1515,11 +1595,14 @@ input[type="checkbox"] {
   }
   .diag-split {
     grid-template-columns: 1fr;
+    height: auto;
   }
   .diag-list {
     border-right: 0;
     border-bottom: 1px solid var(--border);
+    max-height: 38vh;
   }
+  .diag-detail { max-height: 48vh; }
   .diag-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

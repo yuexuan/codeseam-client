@@ -3,7 +3,6 @@ import {
   CalendarClock,
   ChevronRight,
   CircleHelp,
-  ExternalLink,
   FilePenLine,
   FileText,
   FolderOpen,
@@ -17,7 +16,7 @@ import {
   SquareTerminal,
   Stethoscope,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 import type { CodeSeam } from "../lib/useCodeSeam";
 import type { PageId } from "../lib/types";
@@ -76,8 +75,6 @@ export function OverviewPage({
           </>
         }
       />
-
-      {!status?.logged_in && <LoginCard cs={cs} />}
 
       <div className="overview-grid">
         {/* 状态速览 */}
@@ -399,68 +396,5 @@ function Timeline({ activity }: { activity: ActivityEvent[] }) {
         </div>
       ))}
     </div>
-  );
-}
-
-/** 未登录时的登录卡片。 */
-function LoginCard({ cs }: { cs: CodeSeam }) {
-  const { server, setServer, email, setEmail, busy } = cs;
-  const [password, setPassword] = useState("");
-  return (
-    <Card title="登录 CodeSeam" className="login-form">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const p = password;
-          setPassword("");
-          void cs.run("cs_login", { server, email, password: p });
-        }}
-      >
-        <label>
-          服务端地址
-          <input
-            type="url"
-            value={server}
-            onChange={(e) => setServer(e.target.value)}
-            required
-          />
-        </label>
-        <div className="fields">
-          <label>
-            邮箱
-            <input
-              type="email"
-              autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-          <label>
-            密码
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </label>
-        </div>
-        <div className="actions">
-          <Button variant="primary" disabled={busy}>
-            登录
-          </Button>
-          <Button
-            icon={<ExternalLink size={13} />}
-            disabled={busy || !cs.portal}
-            onClick={() => void cs.run("cs_open_portal", { url: cs.portal })}
-          >
-            用户服务门户
-          </Button>
-          <small>注册与找回密码请前往门户</small>
-        </div>
-      </form>
-    </Card>
   );
 }

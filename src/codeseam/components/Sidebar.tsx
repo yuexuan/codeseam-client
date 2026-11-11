@@ -1,4 +1,5 @@
 import {
+  ChevronRight,
   LayoutDashboard,
   Settings,
   SquareTerminal,
@@ -24,7 +25,9 @@ export function Sidebar({
   cs,
   page,
   onSelect,
+  onAccount,
 }: {
+  onAccount: () => void;
   cs: CodeSeam;
   page: PageId;
   onSelect: (p: PageId) => void;
@@ -45,18 +48,19 @@ export function Sidebar({
           </button>
         ))}
       </nav>
-      <div className="user-card">
+      <button type="button" className="user-card user-card--action" onClick={onAccount} aria-haspopup={status?.logged_in ? undefined : "dialog"}>
         <span className="avatar" aria-hidden="true">
           {(email?.[0] || "C").toUpperCase()}
         </span>
         <div className="user-card-meta">
           <strong>
-            <span className="name">{email || (status?.logged_in ? "已登录" : "尚未登录")}</span>
-            {service && <Badge tone="pro">{service.name}</Badge>}
+            <span className="name">{status?.logged_in ? email || "已登录" : "登录账号"}</span>
+            {status?.logged_in && service && <Badge tone="pro">{service.name}</Badge>}
           </strong>
-          <small>{service ? `到期 ${date(service.expires_at)}` : "连接你的编程服务"}</small>
+          <small>{status?.logged_in ? service ? `到期 ${date(service.expires_at)}` : "管理账号与连接" : "按需连接编程服务"}</small>
         </div>
-      </div>
+        <ChevronRight className="user-card-arrow" size={16} aria-hidden="true" />
+      </button>
     </aside>
   );
 }

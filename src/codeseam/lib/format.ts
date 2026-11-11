@@ -16,6 +16,7 @@ export const checkText: Record<string, string> = {
   pass: "通过",
   fail: "失败",
   unknown: "待验证",
+  skipped: "已跳过",
   warning: "待处理",
   not_applicable: "不适用",
 };

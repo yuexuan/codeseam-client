@@ -1,6 +1,7 @@
 /** 全应用共享的数据与动作：状态轮询、命令执行、活动记录、界面偏好。 */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SCAN_ORDER, TITLES } from "./diagnostics";
 import { invoke } from "@tauri-apps/api/core";
 import { clearActivity, loadActivity, pushActivity } from "./activity";
 import { monthRange } from "./format";
@@ -14,9 +15,11 @@ import {
   type UiPrefs,
 } from "./uiPrefs";
 import type {
+  CheckItem,
   ActivityEvent,
   AppPrefs,
   CliInfo,
+  DiagnosticsTab,
   Report,
   Service,
   SettingsTab,
@@ -32,6 +35,8 @@ const EMAIL_KEY = "cs.email";
 export function useCodeSeam() {
   const [status, setStatus] = useState<Status>();
   const [report, setReport] = useState<Report>();
+  const [scan, setScan] = useState<{ids:string[];current?:string;done:number}>();
+  const scanLock = useRef(false);
   const [diagMs, setDiagMs] = useState<number>();
   const [usage, setUsage] = useState<Usage>();
   const [usageReport, setUsageReport] = useState<UsageReport>();
@@ -41,8 +46,15 @@ export function useCodeSeam() {
   const [cliInfo, setCliInfo] = useState<CliInfo>();
   const [activity, setActivity] = useState<ActivityEvent[]>(loadActivity);
   const [busy, setBusy] = useState(false);
+  const [activeCommand, setActiveCommand] = useState<string>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  const dismissNotice = () => setNotice("");
   const [server, setServer] = useState(
     () => localStorage.getItem(SERVER_KEY) || "http://127.0.0.1:18081",
   );
@@ -55,6 +67,10 @@ export function useCodeSeam() {
   const [prefs, setPrefs] = useState<AppPrefs>();
   const [autostart, setAutostartState] = useState<boolean>();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("app");
+  const [diagnosticsTab, setDiagnosticsTab] = useState<DiagnosticsTab>("system");
+  const [diagnosticsDirty, setDiagnosticsDirty] = useState(false);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [configChange, setConfigChange] = useState<{ kind: "apply" | "restore"; at: number }>();
   /** 轮询与命令回调里读取最新界面偏好，避免闭包拿到旧值。 */
   const uiRef = useRef(uiPrefs);
   uiRef.current = uiPrefs;
@@ -101,21 +117,52 @@ export function useCodeSeam() {
       setCliInfo(await invoke<CliInfo>("cs_cli_info"));
     } catch {
       /* 读取失败时页面显示“未提供”，不影响其它功能。 */
+      setCliInfo(undefined);
     }
   }, []);
+
+  // 每一项仅在真实后端请求开始时启动，不添加模拟延迟。
+  const scanDiagnostics = useCallback(async (ids = SCAN_ORDER) => {
+    if (scanLock.current) return;
+    scanLock.current = true;
+    const t0 = performance.now();
+    const results: CheckItem[] = [];
+    setScan({ids,done:0});
+    setReport(previous => ({generatedAt:previous?.generatedAt,apiProtection:"not_checked",canStart:false,
+      checks:[...(previous?.checks??[]).filter(c=>!ids.includes(c.id)),...ids.map(id=>({id,label:TITLES[id]??id,status:"waiting",detail:"—"}))]}));
+    try {
+      for (const id of ids) {
+        setScan({ids,current:id,done:results.length});
+        setReport(r=>r&&({...r,checks:r.checks.map(c=>c.id===id?{...c,status:"running",detail:"正在检测…"}:c)}));
+        let result: CheckItem;
+        try { result = await invoke<CheckItem>("cs_diagnose_item",{id}); if (!result?.id || result.id !== id) throw new Error("检测返回的项目不匹配"); }
+        catch(e) { result={id,label:TITLES[id]??id,status:"interrupted",detail:"检测未完成",evidence:String(e)}; }
+        results.push(result);
+        setReport(r=>r&&({...r,checks:r.checks.map(c=>c.id===id?result:c)}));
+      }
+      setReport(r=> {
+        if(!r) return r;
+        const protectedChecks=r.checks.filter(c=>c.protected);
+        const api=protectedChecks.length ? protectedChecks.some(c=>c.status==="fail")?"fail":protectedChecks.every(c=>c.status==="pass")?"pass":"unknown":"skipped";
+        return {...r,generatedAt:Math.floor(Date.now()/1000),apiProtection:api,canStart:api==="pass",nonApiCoverage:"not_covered"};
+      });
+      setDiagMs(performance.now()-t0);
+      log("check", "环境检测完成");
+    } finally { setScan(undefined); scanLock.current=false; }
+  },[log]);
 
   /** 执行后端命令：统一忙态、错误横幅与活动记录。 */
   const run = useCallback(
     async (cmd: string, args?: Record<string, unknown>) => {
       setBusy(true);
+      setActiveCommand(cmd);
       setError("");
       setNotice("");
       const t0 = performance.now();
       try {
-        const r = await invoke(cmd, args);
+        const r = cmd === "cs_diagnose" ? await scanDiagnostics() : await invoke(cmd, args);
         let done = "操作已完成";
         if (cmd === "cs_diagnose") {
-          setReport(r as Report);
           setDiagMs(performance.now() - t0);
           log("check", "环境诊断完成");
           done = "诊断已完成";
@@ -144,7 +191,13 @@ export function useCodeSeam() {
         if (cmd === "cs_disconnect") log("warn", "已断开本地代理");
         if (cmd === "cs_activate") log("connect", "服务已激活", "本地代理随激活启动");
         if (cmd === "cs_configure") log("config", "配置已备份并更新", "仅改写受管 API 字段");
-        if (cmd === "cs_restore") log("config", "已恢复原配置", "加密备份保留");
+        if (cmd === "cs_restore") log("config", "已恢复原配置", "恢复成功后加密备份已移除");
+        if (["cs_configure", "cs_repair_environment", "cs_restore"].includes(cmd)) {
+          setConfigChange({ kind: cmd === "cs_restore" ? "restore" : "apply", at: Date.now() });
+          await loadCliInfo();
+          await scanDiagnostics(["proxy","config","config_recovery"]);
+          done = "配置已更新并重新检测";
+        }
         await refresh();
         if (uiRef.current.notifyEvents) setNotice(done);
         return r;
@@ -153,9 +206,10 @@ export function useCodeSeam() {
         await refresh().catch(() => {});
       } finally {
         setBusy(false);
+        setActiveCommand(undefined);
       }
     },
-    [server, email, log, refresh],
+    [server, email, log, refresh, loadCliInfo, scanDiagnostics],
   );
 
   /** 用量页取区间内的汇总 / 趋势 / 模型 / 请求明细；独立于全局忙态，失败只影响用量页。 */
@@ -287,6 +341,8 @@ export function useCodeSeam() {
     status,
     report,
     diagMs,
+    scan,
+    scanDiagnostics,
     usage,
     usageReport,
     usageRange,
@@ -298,8 +354,10 @@ export function useCodeSeam() {
     activity,
     service,
     busy,
+    activeCommand,
     error,
     notice,
+    dismissNotice,
     server,
     setServer,
     portal,
@@ -317,6 +375,13 @@ export function useCodeSeam() {
     setAutostart,
     settingsTab,
     setSettingsTab,
+    diagnosticsTab,
+    setDiagnosticsTab,
+    diagnosticsDirty,
+    setDiagnosticsDirty,
+    diagnosticsBusy,
+    setDiagnosticsBusy,
+    configChange,
     resetActivity,
     log,
     run,

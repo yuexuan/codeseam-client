@@ -6,7 +6,7 @@
 //! every process on the machine uses the same route.
 
 use reqwest::{Client, Proxy, Url};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::net::{IpAddr, SocketAddr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -18,7 +18,7 @@ pub const STATUS_FAIL: &str = "fail";
 pub const STATUS_UNKNOWN: &str = "unknown";
 pub const STATUS_NOT_APPLICABLE: &str = "not_applicable";
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Check {
     pub id: String,
@@ -156,7 +156,7 @@ async fn egress_check(ctx: &Context) -> (Check, Check) {
         );
         return (v4, v6);
     };
-    let v4 = text_probe(&proxy_client, "https://api.ipify.org").await;
+    let v4 = text_probe(&proxy_client, "https://api4.ipify.org").await;
     let v4_check = match v4 {
         Ok(ip) => {
             let status = match expected_matches(ctx.expected_egress.as_deref(), &ip) {
@@ -367,9 +367,9 @@ async fn local_route_check(ctx: &Context) -> Check {
     }
 }
 
-pub async fn diagnose(ctx: Context) -> Report {
-    let mut checks = Vec::new();
-    let proxy = if ctx.assigned_proxy.is_some() {
+pub async fn diagnose_one(ctx: &Context, id: &str) -> Check {
+    match id {
+        "proxy" => if ctx.assigned_proxy.is_some() {
         match client(ctx.assigned_proxy.as_deref()) {
             Ok(_) => check(
                 "proxy",
@@ -391,15 +391,8 @@ pub async fn diagnose(ctx: Context) -> Report {
             ),
             "重新激活服务",
         )
-    };
-    checks.push(proxy);
-    let (v4, v6) = egress_check(&ctx).await;
-    checks.push(v4);
-    checks.push(v6);
-    checks.push(dns_check(&ctx).await);
-    checks.push(udp_check(&ctx).await);
-    checks.push(local_route_check(&ctx).await);
-    checks.push(if ctx.cli_configured {
+    },
+        "config" => if ctx.cli_configured {
         check(
             "config",
             "受管配置",
@@ -418,8 +411,13 @@ pub async fn diagnose(ctx: Context) -> Report {
             ),
             "确认后执行备份并配置",
         )
-    });
-    checks.push(Check {
+    },
+        "egress_ipv4" => egress_check(ctx).await.0,
+        "egress_ipv6" => egress_check(ctx).await.1,
+        "dns" => dns_check(ctx).await,
+        "udp" => udp_check(ctx).await,
+        "kill_switch" => local_route_check(ctx).await,
+        "webrtc" => Check {
         id: "webrtc".into(),
         label: "WebRTC / STUN".into(),
         status: STATUS_NOT_APPLICABLE.into(),
@@ -427,8 +425,8 @@ pub async fn diagnose(ctx: Context) -> Report {
         evidence: None,
         protected: false,
         remediation: Some("浏览器/Electron 场景接入后再做 STUN 候选验证".into()),
-    });
-    checks.push(Check {
+    },
+        "non_api" => Check {
         id: "non_api".into(),
         label: "Claude Code 非 API 流量".into(),
         status: STATUS_WARNING.into(),
@@ -436,7 +434,25 @@ pub async fn diagnose(ctx: Context) -> Report {
         evidence: Some("受管启动会注入 HTTP(S)_PROXY/ALL_PROXY；尚无 Windows WFP/TUN 规则证明进程所有连接 fail-closed".into()),
         protected: false,
         remediation: Some("需要覆盖非 API 流量时，接入经实测的 Windows 网络规则/受控隧道后再升级状态".into()),
-    });
+    },
+        _ => check(id, id, STATUS_UNKNOWN, "尚未配置此检测项", false),
+    }
+}
+pub async fn diagnose(ctx: Context) -> Report {
+    let mut checks = Vec::new();
+    for id in [
+        "proxy",
+        "egress_ipv4",
+        "egress_ipv6",
+        "dns",
+        "udp",
+        "kill_switch",
+        "config",
+        "webrtc",
+        "non_api",
+    ] {
+        checks.push(diagnose_one(&ctx, id).await);
+    }
     let blocking = checks
         .iter()
         .any(|c| c.protected && c.status == STATUS_FAIL);

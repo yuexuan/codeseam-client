@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { FolderOpen } from "lucide-react";
 import type { CodeSeam } from "../../lib/useCodeSeam";
+import type { PageId } from "../../lib/types";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { SettingGroup, SettingRow } from "../../components/ui/SettingRow";
-import { ManagedConfig } from "../../components/ManagedConfig";
 
 /** Claude Code 配置：程序检测、受管字段状态、备份与恢复。 */
-export function ClaudeSettings({ cs }: { cs: CodeSeam }) {
+export function ClaudeSettings({ cs, setPage }: { cs: CodeSeam; setPage: (page: PageId) => void }) {
   const { status, cliInfo, busy } = cs;
   useEffect(() => {
     void cs.loadCliInfo();
@@ -50,7 +50,7 @@ export function ClaudeSettings({ cs }: { cs: CodeSeam }) {
 
       <SettingGroup
         title="受管配置"
-        subtitle="只改写 API 地址与授权两个字段；其余设置（权限、模型、钩子等）保持原样。"
+        subtitle="在环境诊断中查看受管 API 字段差异、备份并应用或恢复。"
       >
         <SettingRow title="配置状态" desc="Claude Code 的 API 入口是否已指向本地受管代理。">
           <Badge tone={status?.configured ? "green" : "amber"}>
@@ -63,7 +63,7 @@ export function ClaudeSettings({ cs }: { cs: CodeSeam }) {
         <SettingRow title="授权令牌" desc="ANTHROPIC_AUTH_TOKEN：仅为本地占位值，真实服务授权保留在 CodeSeam 本地服务。">
           <span className="set-value">本地占位令牌</span>
         </SettingRow>
-        <ManagedConfig cs={cs} />
+        <Button onClick={() => { cs.setDiagnosticsTab("claude"); setPage("diagnostics"); }}>前往 Claude API 配置</Button>
         <p className="set-note">
           恢复原配置会还原备份的字段；若外部改动了受管字段则不会覆盖，并保留加密备份。受管终端运行时无法恢复。
         </p>

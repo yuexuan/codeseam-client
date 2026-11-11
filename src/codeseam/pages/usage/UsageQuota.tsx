@@ -91,7 +91,7 @@ export function UsageQuota({ cs, report }: { cs: CodeSeam; report?: UsageReport 
               </div>
             </>
           ) : (
-            <p className="table-empty">尚未获取到服务，请先在概览页登录并激活。</p>
+            <p className="table-empty">尚未获取到服务，请先通过左下角账号入口登录并激活。</p>
           )}
           {others.length > 0 && (
             <>

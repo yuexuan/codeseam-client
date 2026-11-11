@@ -1,9 +1,12 @@
 //! P1 entry point. Upstream provider import/export and update startup are not run.
 mod cli;
+mod browser;
+mod system_network;
 mod environment;
 mod network;
 mod shell;
 mod vault;
+mod sg;
 
 use crate::proxy::{self, AppTarget, ProxyControl, ProxyHandle, ProxyRuntimeConfig};
 use serde::{Deserialize, Serialize};
@@ -453,10 +456,30 @@ pub fn uninstall() -> Result<(), String> {
     vault::remove(SESSION)
 }
 
+#[tauri::command]
+async fn cs_diagnose_item(state: State<'_, Desktop>, browser: State<'_, browser::BrowserState>, system: State<'_, system_network::SystemNetwork>, id: String) -> Result<network::Check,String> {
+    if id.starts_with("browser_") { return browser.diagnose_one(&id).await; }
+    if matches!(id.as_str(),"local_ipv6"|"system_dns") {
+        return system.report_one(&id).await;
+    }
+    if id=="local_sg_node" { return Ok(sg::diagnose().await); }
+    let r=state.inner.lock().await;
+    let context=report_context(&state,&r);
+    let profile=r.network.as_ref().map(|v|v["region_profile"].clone());
+    drop(r);
+    if matches!(id.as_str(),"proxy"|"config"|"egress_ipv4"|"egress_ipv6"|"dns"|"udp"|"kill_switch"|"non_api") {
+        return Ok(match context {
+            Some(ctx)=>network::diagnose_one(&ctx,&id).await,
+            None=>network::Check{id:id.clone(),label:id,status:"skipped".into(),detail:"请先连接编程服务".into(),evidence:None,protected:false,remediation:Some("激活服务后重新检测".into())}
+        });
+    }
+    Ok(environment::diagnose_one(profile.as_ref(),&id).await)
+}
+
 /// 运行一次真实网络探针。公网专属出口、DNS 远端解析和非 API 进程规则
 /// 都按证据分别报告；缺少证据时返回 unknown/not_covered。
 #[tauri::command]
-async fn cs_diagnose(state: State<'_, Desktop>) -> Result<network::Report, String> {
+async fn cs_diagnose(state: State<'_, Desktop>, browser: State<'_, browser::BrowserState>, system: State<'_, system_network::SystemNetwork>) -> Result<network::Report, String> {
     let r = state.inner.lock().await;
     let context = report_context(&state, &r);
     let profile = r.network.as_ref().map(|v| v["region_profile"].clone());
@@ -468,13 +491,19 @@ async fn cs_diagnose(state: State<'_, Desktop>) -> Result<network::Report, Strin
             generated_at: now(),
             checks: vec![],
             can_start: false,
-            api_protection: "unknown".into(),
+            // 缺少服务上下文时跳过 API 验证，但继续执行本地诊断。
+            // 受管启动仍需要服务，因此 can_start 保持为 false。
+            api_protection: "skipped".into(),
             non_api_coverage: "not_covered".into(),
         }
     };
     report
         .checks
         .extend(environment::diagnose(profile.as_ref()).await);
+    report.checks.push(sg::check());
+    report.checks.extend(browser.checks().await);
+    report.checks.retain(|c| c.id != "local_ipv6");
+    report.checks.extend(system.report_checks().await);
     Ok(report)
 }
 #[tauri::command]
@@ -611,6 +640,8 @@ pub fn run() {
             None,
         ))
         .manage(Desktop::new())
+        .manage(browser::BrowserState::default())
+        .manage(system_network::SystemNetwork::default())
         .setup(|app| {
             // 托盘图标创建失败时仅禁用“关闭到托盘”，不能阻止客户端启动。
             if let Err(e) = shell::setup_tray(app.handle()) {
@@ -638,6 +669,19 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            system_network::cs_system_network_inspect,
+            system_network::cs_system_network_plan,
+            system_network::cs_system_network_apply,
+            system_network::cs_system_network_restore,
+            browser::cs_browser_status,
+            browser::cs_browser_start,
+            browser::cs_browser_stop,
+            browser::cs_browser_destroy,
+            browser::cs_browser_diagnose,
+            sg::cs_sg_import,
+            sg::cs_sg_status,
+            sg::cs_sg_probe,
+            sg::cs_sg_remove,
             cs_login,
             cs_resume,
             cs_status,
@@ -649,6 +693,7 @@ pub fn run() {
             cs_usage_report,
             cs_open_portal,
             cs_diagnose,
+            cs_diagnose_item,
             cs_refresh,
             cs_activate,
             cs_configure,
@@ -665,6 +710,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 let state = app.state::<Desktop>();
                 tauri::async_runtime::block_on(async {
+                    app.state::<browser::BrowserState>().stop().await;
                     state.stop().await;
                     stop_child(&mut *state.inner.lock().await);
                     if let Err(error) = cli::restore() {
@@ -674,6 +720,8 @@ pub fn run() {
             }
         });
 }
+
+pub fn network_helper(token: &str) -> i32 { system_network::helper(token) }
 
 #[cfg(test)]
 mod tests {

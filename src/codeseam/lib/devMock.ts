@@ -1,5 +1,6 @@
 /** 仅开发模式、且不在 Tauri 壳内（浏览器预览）时启用的后端模拟，用于查看页面效果；不会进入生产包。 */
 
+import { diagnosticsPreview } from "./diagnosticsPreview";
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
 const MODELS = ["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-haiku-20241022"];
@@ -84,9 +85,29 @@ export function installDevMock() {
   let autostart = false;
 
   mockWindows("main");
-  mockIPC((cmd, args) => {
+  mockIPC(async (cmd, args) => {
+    if(new URLSearchParams(location.search).get("qa")==="diagnostics") { const value=await diagnosticsPreview(cmd,(args??{}) as Record<string,unknown>); if(value!==undefined)return value; }
     const a = (args ?? {}) as { start?: string; end?: string; prefs?: typeof prefs };
     switch (cmd) {
+      case "cs_diagnose":
+      case "cs_configure":
+      case "cs_restore":
+      case "cs_repair_environment":
+        throw new Error("浏览器仅预览界面；请在桌面客户端执行真实检测、配置和恢复。");
+      case "cs_sg_status":
+        return { configured: false };
+      case "cs_sg_import":
+      case "cs_sg_probe":
+      case "cs_sg_remove":
+        throw new Error("请在桌面客户端管理真实节点；浏览器仅预览界面，不保存节点凭据。");
+      case "cs_login":
+        status.logged_in = true;
+        return null;
+      case "cs_logout":
+        status.logged_in = false;
+        status.proxy_running = false;
+        status.configured = false;
+        return null;
       case "cs_prefs_get":
       case "cs_prefs_set":
         if (a.prefs) prefs = { ...prefs, ...a.prefs };

@@ -57,7 +57,7 @@ fn matches(v: &Value, b: &Backup) -> bool {
     FIELDS.iter().all(|k| v["env"].get(*k) == b.managed.get(*k))
 }
 
-/// A DPAPI snapshot survives abnormal exit. Never overwrite a conflicting edit.
+/// DPAPI 快照可在程序异常退出后保留；发现配置被冲突修改时绝不覆盖。
 pub fn recovery_state() -> &'static str {
     match backup() {
         Ok(None) => "clean",
@@ -150,7 +150,14 @@ pub fn detect() -> Option<String> {
         .find(|s| s.ends_with(".exe") || s.ends_with(".cmd"))
         .map(str::to_owned)
 }
-/// 为控制台页面读取的信息。此函数只返回环境变量名称和数量，不会将变量值（包括受管令牌）传给界面。
+/// 仅返回字段是否存在，不返回原始地址或授权，避免 URL 内嵌凭据泄露。
+fn managed_preview(value: &Value) -> Value {
+    Value::Object(FIELDS.iter().map(|key| {
+        let present = value["env"].get(*key).is_some();
+        (key.to_string(), json!(if present { "已设置（已隐藏）" } else { "未设置" }))
+    }).collect())
+}
+/// 为控制台页面读取的脱敏信息；无法解析的配置不能被展示为可应用。
 pub fn info() -> Value {
     let exe = detect();
     let version = exe.as_deref().and_then(|e| {
@@ -161,10 +168,12 @@ pub fn info() -> Value {
             .filter(|v| !v.is_empty())
     });
     let settings = path().ok();
-    let value = settings
+    let loaded = settings
         .as_ref()
-        .and_then(|p| load(p).ok())
-        .unwrap_or_else(|| json!({}));
+        .ok_or_else(|| "找不到配置目录".to_string())
+        .and_then(load);
+    let settings_readable = loaded.is_ok();
+    let value = loaded.unwrap_or_else(|_| json!({}));
     let env = value["env"].as_object();
     let model = env
         .and_then(|e| e.get("ANTHROPIC_MODEL"))
@@ -180,6 +189,9 @@ pub fn info() -> Value {
         "model": model,
         "timeout_ms": timeout_ms,
         "env_count": env.map_or(0, |e| e.len()),
+        "settings_readable": settings_readable,
+        "managed_fields": if settings_readable { managed_preview(&value) } else { json!({}) },
+        "recovery_state": recovery_state(),
     })
 }
 pub fn hidden(program: &str) -> Command {
@@ -252,6 +264,19 @@ pub fn launch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preview_never_returns_credentials_or_embedded_url_secrets() {
+        let preview = managed_preview(&json!({"env":{
+            "ANTHROPIC_BASE_URL":"https://user:secret@example.com/?key=private",
+            "ANTHROPIC_AUTH_TOKEN":"sensitive-token"
+        }}));
+        assert_eq!(preview["ANTHROPIC_API_KEY"], "未设置");
+        assert_eq!(preview["ANTHROPIC_AUTH_TOKEN"], "已设置（已隐藏）");
+        let text = preview.to_string();
+        for secret in ["secret", "private", "sensitive-token", "example.com"] {
+            assert!(!text.contains(secret));
+        }
+    }
     #[test]
     fn detects_drift_without_touching_unrelated_settings() {
         let managed = json!({"ANTHROPIC_BASE_URL":"http://127.0.0.1:18899/claude","ANTHROPIC_AUTH_TOKEN":TOKEN});

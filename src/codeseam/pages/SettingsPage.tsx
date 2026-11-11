@@ -112,7 +112,7 @@ export function SettingsPage({
         {cur.id === "app" && <AppSettings cs={cs} />}
         {cur.id === "proxy" && <ProxySettings cs={cs} />}
         {cur.id === "network" && <NetworkSettings cs={cs} setPage={setPage} />}
-        {cur.id === "claude" && <ClaudeSettings cs={cs} />}
+        {cur.id === "claude" && <ClaudeSettings cs={cs} setPage={setPage} />}
         {cur.id === "models" && <ModelSettings cs={cs} />}
         {cur.id === "workdir" && <WorkDirSettings cs={cs} />}
         {cur.id === "logs" && <LogSettings cs={cs} />}

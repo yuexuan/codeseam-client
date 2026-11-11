@@ -13,6 +13,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+shadowsocks-service = { version = "=1.24.0", default-features = false, features = ["local-http", "aead-cipher"] }
+shadowsocks = { version = "=1.24.0", default-features = false }
+base64 = "0.22"
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-window-state = "2"
 tauri-plugin-deep-link = "2"
@@ -23,7 +26,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 axum = "0.8"
 tokio = { version = "1", features = ["net", "rt", "sync"] }
 futures-util = "0.3"
+tokio-tungstenite = "0.28"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_SystemInformation"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

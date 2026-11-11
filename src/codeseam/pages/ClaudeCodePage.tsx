@@ -256,7 +256,7 @@ export function ClaudeCodePage({
             <StatusRow
               label="Claude 访问"
               ok={!!report?.canStart}
-              state={report ? (report.canStart ? "可启动" : "已阻断") : "待验证"}
+              state={report?.apiProtection === "skipped" ? "待接入服务" : report ? (report.canStart ? "可启动" : "已阻断") : "待验证"}
               right={
                 <button
                   className="link"

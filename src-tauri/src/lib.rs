@@ -2,6 +2,7 @@
 mod ccswitch;
 mod codeseam;
 pub use codeseam::uninstall as codeseam_uninstall;
+pub use codeseam::network_helper as codeseam_network_helper;
 mod claude_desktop;
 mod claude_ext;
 mod config;
