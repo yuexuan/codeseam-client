@@ -566,6 +566,7 @@ mod tests {
     }
     #[test]
     fn mihomo_parses_uri_and_yaml_via_provider_api() {
+        let _lock = crate::infrastructure::TEST_HOME_LOCK.lock().unwrap();
         let configs = vec![
             serde_json::json!({"uri":"trojan://fixture-password@127.0.0.1:9#fixture"}),
             serde_json::json!({"name":"yaml-fixture","type":"http","server":"127.0.0.1","port":9}),
