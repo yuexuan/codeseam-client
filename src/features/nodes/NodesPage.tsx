@@ -25,6 +25,21 @@ export function NodesPage({ service }: { service: NodesService }) {
     queryKey: ['nodes'],
     queryFn: () => service.read(),
   });
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void service
+      .subscribe?.((snapshot) => client.setQueryData(['nodes'], snapshot))
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [service, client]);
   const [tab, setTab] = useState<'clash' | 'general'>('clash');
   const [links, setLinks] = useState('');
   const [protocol, setProtocol] = useState<ProxyProtocol>('socks5');
@@ -254,7 +269,10 @@ export function NodesPage({ service }: { service: NodesService }) {
             role={error ? 'alert' : 'status'}
             className={error ? styles.error : styles.notice}
           >
-            {error?.message ?? notice}
+            {error?.message ??
+              (testing.isPending
+                ? `正在检测 · 已完成 ${data?.nodes.filter((node) => node.status !== 'testing').length ?? 0} / ${data?.nodes.length ?? 0}`
+                : notice)}
           </p>
           <div className={styles.listHeader}>
             <h2>
@@ -324,7 +342,7 @@ export function NodesPage({ service }: { service: NodesService }) {
                         : styles.latency
                     }
                   >
-                    {testing.isPending
+                    {testing.isPending && node.status === 'testing'
                       ? '检测中'
                       : node.latency !== null
                         ? `${node.latency} ms`
@@ -396,7 +414,7 @@ export function NodesPage({ service }: { service: NodesService }) {
                     : styles.latency
                 }
               >
-                {testing.isPending
+                {testing.isPending && selected?.status === 'testing'
                   ? '检测中'
                   : selected?.status === 'connected'
                     ? '连接正常'

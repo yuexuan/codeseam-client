@@ -2,7 +2,7 @@ mod application;
 mod commands;
 mod domain;
 mod infrastructure;
-fn bindings<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
+fn bindings() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::new().commands(tauri_specta::collect_commands![
         commands::read_startup,
         commands::scan_environment,
@@ -23,7 +23,7 @@ pub fn uninstall() -> Result<(), String> {
     application::recovery::finish_legacy_session()
 }
 pub fn run() {
-    let builder = bindings::<tauri::Wry>();
+    let builder = bindings();
     tauri::Builder::default()
         .manage(commands::Operations::default())
         .invoke_handler(builder.invoke_handler())
@@ -33,7 +33,7 @@ pub fn run() {
 pub fn export_bindings() {
     let target = std::env::var("CODESEAM_BINDINGS_PATH")
         .unwrap_or_else(|_| "../src/bindings/commands.ts".into());
-    bindings::<tauri::Wry>()
+    bindings()
         .export(specta_typescript::Typescript::default(), target)
         .expect("生成绑定失败");
 }

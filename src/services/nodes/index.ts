@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event';
 import {
   commands,
   type GeneralProxy,
@@ -7,6 +8,7 @@ import {
 import { call } from '../../core/ipc/call';
 export type ProxyProtocol = 'socks5' | 'http' | 'https';
 export interface NodesService {
+  subscribe?(listener: (snapshot: NodeSnapshot) => void): Promise<() => void>;
   read(): Promise<NodeSnapshot>;
   importLinks(links: string): Promise<ImportResult>;
   importProxy(proxy: GeneralProxy): Promise<ImportResult>;
@@ -15,6 +17,8 @@ export interface NodesService {
   test(): Promise<void>;
 }
 export const nativeNodes: NodesService = {
+  subscribe: (listener) =>
+    listen<NodeSnapshot>('nodes-progress', (event) => listener(event.payload)),
   read: () =>
     call('read_nodes', async () => {
       const result = await commands.readNodes();

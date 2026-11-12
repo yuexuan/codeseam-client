@@ -144,7 +144,10 @@ impl Engine {
             .bearer_auth(&self.secret)
             .send()
             .and_then(|r| r.error_for_status())
-            .map_err(|_| "Mihomo API 请求失败")?;
+            .map_err(|e| match e.status() {
+                Some(status) => format!("Mihomo API 返回 HTTP {}", status.as_u16()),
+                None => "Mihomo API 请求失败".into(),
+            })?;
         let mut bytes = Vec::new();
         response
             .take(2 * 1024 * 1024 + 1)
@@ -161,7 +164,12 @@ impl Engine {
         Ok(nodes[0].clone())
     }
     pub fn delay(&self, i: usize, name: &str) -> Result<u32, String> {
-        let name: String = url::form_urlencoded::byte_serialize(name.as_bytes()).collect();
+        let mut encoded = url::Url::parse(&self.base).map_err(|_| "内核地址无效")?;
+        encoded
+            .path_segments_mut()
+            .map_err(|_| "内核地址无效")?
+            .push(name);
+        let name = encoded.path().trim_start_matches('/');
         self.get(&format!("/providers/proxies/p{i}/{name}/healthcheck?url=https%3A%2F%2Fwww.gstatic.com%2Fgenerate_204&timeout=5000"))?["delay"].as_u64().map(|v| v.min(u32::MAX as u64) as u32).ok_or("测速失败".into())
     }
 }

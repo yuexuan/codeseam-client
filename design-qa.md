@@ -8,6 +8,6 @@ Preserved the existing two-column layout, orange palette, typography, supplied l
 
 Verified 25-node import, renamed duplicate rejected with “新增 0 个节点，跳过 1 个重复节点”, 29 total nodes, and scrolling to the last rows while the input, side cards and footer stay fixed. Notices reserve space. Node radios, deletion controls and list remain keyboard accessible. Long names have a title and do not expand rows horizontally. Small windows retain outer content scrolling and the footer.
 
-Native verification separately covers URI/YAML provider API parsing, HTTP Base64 subscription expansion, retry deduplication, encrypted persistence, and actual exit lookup through Mihomo using the existing local proxy. The supplied subscription returns HTTP 400, so its node count and connectivity are unverified. Development preview explicitly rejects remote subscription requests.
+Native verification separately covers URI/YAML provider API parsing, HTTP Base64 subscription expansion, retry deduplication, encrypted persistence, and actual exit lookup through Mihomo using the existing local proxy. The supplied subscription initially returned HTTP 400 for the Mihomo UA. Legacy Clash negotiation fallback successfully retrieved 103 records: 100 unique nodes, repeat import added zero and skipped 103 duplicates, and seven nodes returned real exit evidence. Other nodes retained failed states. Development preview explicitly rejects remote subscription requests.
 
 No outstanding P0/P1/P2 visual findings within the requested node import/scroll scope. Later setup stages remain outside this update.

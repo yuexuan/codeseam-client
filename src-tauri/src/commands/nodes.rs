@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use std::time::Instant;
+use tauri::Emitter;
 
 async fn run<T: Send + 'static>(
     state: tauri::State<'_, Operations>,
@@ -57,6 +58,14 @@ pub async fn remove_node(state: tauri::State<'_, Operations>, id: String) -> Res
 }
 #[tauri::command]
 #[specta::specta]
-pub async fn test_nodes(state: tauri::State<'_, Operations>) -> Result<(), AppError> {
-    run(state, "test_nodes", nodes::test).await
+pub async fn test_nodes(
+    state: tauri::State<'_, Operations>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    run(state, "test_nodes", move || {
+        nodes::test_with_progress(|snapshot| {
+            let _ = app.emit("nodes-progress", snapshot);
+        })
+    })
+    .await
 }

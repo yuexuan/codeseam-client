@@ -217,22 +217,32 @@ pub fn import_links(links: String) -> Result<ImportResult, String> {
             .timeout(Duration::from_secs(20))
             .build()
             .map_err(|_| "无法创建订阅请求")?;
-        let response = client
-            .get(url)
-            .header(reqwest::header::USER_AGENT, "mihomo/1.19.34")
-            .header(
-                reqwest::header::ACCEPT,
-                "application/yaml, text/yaml, text/plain, */*",
-            )
-            .send()
-            .and_then(|r| r.error_for_status())
-            .map_err(|e| match e.status() {
-                Some(status) => format!(
-                    "订阅服务器返回 HTTP {}，请检查链接是否有效",
-                    status.as_u16()
-                ),
-                None => "订阅获取失败，请检查网络或代理设置".into(),
-            })?;
+        // Some subscription gateways only recognize legacy Clash client UAs.
+        // Keep Mihomo negotiation first, retry incompatible format negotiation once.
+        let request = |agent: &str| {
+            client
+                .get(url.clone())
+                .header(reqwest::header::USER_AGENT, agent)
+                .header(
+                    reqwest::header::ACCEPT,
+                    "application/yaml, text/yaml, text/plain, */*",
+                )
+                .send()
+        };
+        let response =
+            request("mihomo/1.19.34").map_err(|_| "订阅获取失败，请检查网络或代理设置")?;
+        let response = if matches!(response.status().as_u16(), 400 | 406) {
+            request("ClashforWindows/0.20.39").map_err(|_| "订阅获取失败，请检查网络或代理设置")?
+        } else {
+            response
+        };
+        let response = response.error_for_status().map_err(|e| match e.status() {
+            Some(status) => format!(
+                "订阅服务器返回 HTTP {}，请检查链接是否有效",
+                status.as_u16()
+            ),
+            None => "订阅获取失败，请检查网络或代理设置".into(),
+        })?;
         let mut bytes = Vec::new();
         response
             .take(2 * 1024 * 1024 + 1)
@@ -379,20 +389,41 @@ pub fn remove(id: String) -> Result<(), String> {
     }
     save(&store)
 }
+#[cfg(test)]
 pub fn test() -> Result<(), String> {
+    test_with_progress(|_| {})
+}
+pub fn test_with_progress(progress: impl Fn(NodeSnapshot)) -> Result<(), String> {
     let mut store = load()?;
     if store.nodes.is_empty() {
         return Ok(());
     }
     let configs = store.nodes.iter().map(native_config).collect::<Vec<_>>();
     let engine = mihomo::Engine::start(&configs)?;
-    for chunk in store.nodes.chunks_mut(4).enumerate() {
-        let (batch, items) = chunk;
+    for item in &mut store.nodes {
+        item.summary.status = "testing".into();
+        item.summary.latency = None;
+        item.summary.region = None;
+        item.summary.country_code = None;
+        item.summary.exit_ip = None;
+    }
+    let snapshot = |store: &Store| NodeSnapshot {
+        nodes: store.nodes.iter().map(|r| r.summary.clone()).collect(),
+        selected_id: store.selected_id.clone(),
+        runtime: ProxyRuntime {
+            running: Some(true),
+            version: Some(mihomo::VERSION.into()),
+        },
+    };
+    progress(snapshot(&store));
+    for start in (0..store.nodes.len()).step_by(4) {
+        let end = (start + 4).min(store.nodes.len());
+        let items = &mut store.nodes[start..end];
         std::thread::scope(|scope| {
             for (offset, item) in items.iter_mut().enumerate() {
                 let engine = &engine;
                 scope.spawn(move || {
-                    let index = batch * 4 + offset;
+                    let index = start + offset;
                     item.summary.latency = None;
                     item.summary.exit_ip = None;
                     item.summary.region = None;
@@ -431,6 +462,8 @@ pub fn test() -> Result<(), String> {
                 });
             }
         });
+        save(&store)?;
+        progress(snapshot(&store));
     }
     save(&store)
 }
@@ -569,11 +602,15 @@ mod tests {
         let _lock = crate::infrastructure::TEST_HOME_LOCK.lock().unwrap();
         let configs = vec![
             serde_json::json!({"uri":"trojan://fixture-password@127.0.0.1:9#fixture"}),
-            serde_json::json!({"name":"yaml-fixture","type":"http","server":"127.0.0.1","port":9}),
+            serde_json::json!({"name":"香港 node + / #","type":"http","server":"127.0.0.1","port":9}),
         ];
         let engine = mihomo::Engine::start(&configs).unwrap();
         assert_eq!(engine.node(0).unwrap()["name"], "fixture");
-        assert_eq!(engine.node(1).unwrap()["name"], "yaml-fixture");
+        assert_eq!(engine.node(1).unwrap()["name"], "香港 node + / #");
+        assert!(engine
+            .delay(1, "香港 node + / #")
+            .unwrap_err()
+            .contains("503"));
         assert!(engine.delay(0, "fixture").is_err());
     }
     #[test]
@@ -588,10 +625,17 @@ mod tests {
         let worker = std::thread::spawn(move || {
             let body =
                 STANDARD.encode("trojan://first@127.0.0.1:9#one\ntrojan://second@127.0.0.1:9#two");
-            for _ in 0..2 {
+            for _ in 0..4 {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut request = [0; 4096];
-                let _ = stream.read(&mut request);
+                let length = stream.read(&mut request).unwrap();
+                if String::from_utf8_lossy(&request[..length]).contains("mihomo/1.19.34") {
+                    write!(stream, "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+                    continue;
+                }
+                assert!(
+                    String::from_utf8_lossy(&request[..length]).contains("ClashforWindows/0.20.39")
+                );
                 write!(
                     stream,
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -607,6 +651,21 @@ mod tests {
             let retry = import_links(format!("http://{address}/subscription")).unwrap();
             assert_eq!((retry.added, retry.duplicates), (0, 2));
             assert_eq!(read().unwrap().nodes.len(), 2);
+            let updates = std::cell::RefCell::new(Vec::new());
+            test_with_progress(|snapshot| updates.borrow_mut().push(snapshot)).unwrap();
+            let updates = updates.into_inner();
+            assert!(updates
+                .first()
+                .unwrap()
+                .nodes
+                .iter()
+                .all(|n| n.status == "testing"));
+            assert!(updates
+                .last()
+                .unwrap()
+                .nodes
+                .iter()
+                .all(|n| n.status == "failed" && n.exit_ip.is_none()));
         });
         worker.join().unwrap();
         match prior {
