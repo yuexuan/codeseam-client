@@ -1,0 +1,7 @@
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--inset), var(--shadow);
+  backdrop-filter: blur(var(--blur));
+}

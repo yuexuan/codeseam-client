@@ -1,0 +1,147 @@
+.shell {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--titlebar-height) auto minmax(0, 1fr) auto;
+  background: var(--app-background);
+}
+.nodesShell {
+  --page-gutter: clamp(24px, 2.8vw, 48px);
+  --titlebar-height: 56px;
+  --step-gutter: clamp(40px, 10.6vw, 180px);
+  --action-width: 11.3rem;
+  --brand: var(--nodes-brand);
+  --brand-strong: var(--nodes-brand-strong);
+  --primary-fill: var(--nodes-primary-fill);
+  --app-background: var(--nodes-background);
+}
+.titlebar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: var(--logo-gutter);
+}
+.titlebar img {
+  width: var(--logo-size);
+  height: var(--logo-size);
+  pointer-events: none;
+}
+.controls {
+  display: flex;
+  align-self: start;
+}
+.controls button {
+  width: var(--window-button-width);
+  height: var(--window-button-height);
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.controls button:hover {
+  background: var(--hover);
+}
+.controls .close:hover {
+  background: var(--danger);
+  color: var(--on-primary);
+}
+.steps {
+  padding: var(--space-4) var(--step-gutter) var(--space-5);
+}
+.nodesShell .steps {
+  padding-bottom: 2px;
+}
+.steps ol {
+  padding: 0;
+  margin: 0;
+  display: flex;
+  list-style: none;
+  align-items: center;
+}
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  font-size: var(--font-base);
+  flex: 1;
+  color: var(--secondary);
+}
+.steps li:last-child {
+  flex: 0;
+}
+.steps li:not(:last-child)::after {
+  content: '';
+  height: 1px;
+  background: var(--line-strong);
+  flex: 1;
+  margin-inline: var(--space-2);
+}
+.steps li[aria-current] {
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+.steps li[aria-current]::after {
+  background: var(--brand);
+}
+.number {
+  width: var(--step-size);
+  height: var(--step-size);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+li[aria-current] .number {
+  background: var(--primary-fill);
+  border-color: var(--brand);
+  color: var(--on-primary);
+  box-shadow: var(--shadow);
+}
+.content {
+  overflow: auto;
+  padding: var(--space-2) var(--page-gutter) var(--space-3);
+  scrollbar-gutter: stable;
+}
+.nodesShell .content {
+  scrollbar-gutter: auto;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--page-gutter) var(--space-5);
+}
+.preview {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--step-gutter);
+  color: var(--brand-strong);
+  font-size: var(--font-xs);
+  margin: 0 0 var(--space-2);
+}
+.error {
+  color: var(--danger);
+}
+@media (width <= 900px) {
+  .steps {
+    padding-inline: var(--page-gutter);
+  }
+  .steps li {
+    gap: var(--space-1);
+    font-size: var(--font-sm);
+  }
+  .steps li:not(:last-child)::after {
+    margin-inline: var(--space-1);
+  }
+}
+
+.done {
+  background: var(--success-fill);
+  color: var(--on-primary);
+  border-color: var(--success);
+  box-shadow: var(--shadow);
+}

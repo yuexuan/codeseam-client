@@ -1,0 +1,8 @@
+.back {
+  margin-right: auto;
+  font-size: var(--font-lg);
+  padding: var(--space-3) var(--space-6);
+}
+.unsupported {
+  padding: var(--space-6);
+}

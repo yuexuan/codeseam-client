@@ -1,316 +1,41 @@
-<div align="center">
+# CodeSeam
 
-<img src="./src/assets/zsw.png" alt="z-switch" width="120" />
+Windows 优先的独立本地桌面应用。当前交付为环境预检首稿：读取本机系统、Claude 应用、网络与可选运行能力，识别旧受管备份，按明确确认执行已有备份恢复。
 
-# z-switch
+不需要 CodeSeam 登录、业务服务端、激活或计费。Claude 官方登录由用户在官方应用完成。必要联网能力按产品后续阶段接入；纯本地不等于完全离线。
 
-**面向 Claude Code、Codex 与 Grok 的桌面供应商一键切换器 —— 直连原子改写或本地代理热切换**
+## 开发与验证
 
-One-click desktop provider switcher for Claude Code, Codex &amp; Grok — atomic direct-write or live hot-swap.
+Windows 10/11 64 位，Node.js 22、Rust stable、Visual Studio C++ Build Tools 与 WebView2。
 
-由 真测 Ztest · [ztest.ai](https://ztest.ai) 出品 · 开源 · 无广告 · 无返利链接 · inspired by [cc-switch](https://github.com/farion1231/cc-switch)
-
-<p>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2b2b2b" />
-  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" />
-  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" />
-  <img alt="Rust" src="https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
-  <a href="https://github.com/ZtestAi/z-switch/releases"><img alt="Release" src="https://img.shields.io/github/v/release/ZtestAi/z-switch?logo=github" /></a>
-  <a href="https://github.com/ZtestAi/z-switch/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/ZtestAi/z-switch/total?logo=github&label=downloads" /></a>
-  <a href="https://github.com/ZtestAi/z-switch/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/ZtestAi/z-switch?style=flat&logo=github" /></a>
-</p>
-
-</div>
-
----
-
-## 简介
-
-**z-switch** 让你在多个 API 中转站 / 官方账号之间，为 Claude Code、Codex 和 Grok 快速切换供应商。
-
-它提供两种工作方式：
-
-- **直连模式（默认）** — 直接、原子化地改写客户端配置文件，切换后由客户端本身生效，零中间层。
-- **本地路由模式（实验）** — 启动一个 `localhost` 代理，让你在**进程运行期间热切换**目标供应商，无需重启客户端。
-
-项目坚持**开源、无广告、无返利链接**，当前专注于把「切换」这一核心能力做扎实；MCP、技能（Skills）等扩展功能也可能在后续版本中逐步加入。
-
-> ⚠️ **隐私优先**：所有配置和快照都保存在本地。真实测试内容、模型回复与 API Key **不写入任何持久化文件**。
-
-<div align="center">
-  <img src="docs/screenshots/ztest-1.png" alt="z-switch 主界面" width="760" />
-</div>
-
-### English
-
-**z-switch** is a free, open-source desktop app (Windows / macOS / Linux) for switching API providers in **Claude Code**, **OpenAI Codex CLI** and **Grok CLI** with one click — a lightweight [cc-switch](https://github.com/farion1231/cc-switch) alternative built with Tauri 2 + Rust.
-
-- Switch between official accounts and any third-party API relay / gateway without editing `settings.json`, `auth.json` or `config.toml` by hand.
-- Atomic writes, automatic backups and a one-click restore of your original config.
-- Provider health checks: connectivity test, model list fetch, HTTP latency test and a real streaming test (with optional Claude Code / Codex CLI request emulation for relays that only accept official clients).
-- Optional local proxy for hot-swapping providers while the CLI is running.
-- Syncs to Claude Desktop (3P gateway) and the Claude Code VS Code extension.
-- Supports Claude 5.x models (Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5) and Codex's Responses API.
-- No ads, no telemetry, no referral links. MIT licensed.
-
-[Download the latest release](https://github.com/ZtestAi/z-switch/releases) · [User guide (Chinese)](./docs/USAGE.md)
-
----
-
-## 目录
-
-- [核心特性](#核心特性)
-- [赞助商](#-赞助商)
-- [快速开始](#快速开始)
-- [使用指南](#使用指南)
-- [工作原理](#工作原理)
-- [数据与文件位置](#数据与文件位置)
-- [安全与隐私](#安全与隐私)
-- [开发](#开发)
-- [项目结构](#项目结构)
-- [致谢](#致谢)
-- [许可](#许可)
-
----
-
-## 核心特性
-
-| 分类 | 能力 |
-| --- | --- |
-| **供应商管理** | Claude Code / Codex / Grok 分区管理、一键切换；自定义供应商的添加、复制、编辑、删除、**批量删除**；表单与 JSON 两种编辑方式 |
-| **网络代理** | 为 Claude Code / Codex 配置 HTTP 代理：全局默认 + 供应商单独设置（单独设置优先，官方账号卡片同样支持）；Claude 注入 `env`，Codex 写 `~/.codex/.env` 托管区块 |
-| **开箱即用** | 内置 Claude / OpenAI 官方账号卡片，可与任意 API 中转站来回切换；首次启动自动保留并导入已有的 `~/.claude` / `~/.codex` / `~/.grok` 配置 |
-| **多档模型** | Claude 支持主模型与 Haiku / Sonnet / Opus / Fable 四档独立配置，已适配 Claude 5.x（原生 1M 上下文），旧模型可勾选 `[1M]` 标记；Codex 统一使用 `responses` 协议（旧 `chat` 配置自动迁移），支持 low ~ ultra 推理强度；Grok 单模型 + `context_window`（默认 500000） |
-| **供应商体检** | Base URL 智能推断、连通性测试、模型列表拉取、**HTTP 层测速**，以及发送最小流式 `Hi` 的**真实调用测试**（显示首字耗时与总耗时；可选**模拟 Claude Code / Codex CLI 请求**，适配只放行官方客户端的中转站） |
-| **迁移与自检** | 从 **cc-switch 一键导入**（SQLite 优先、config.json 回退）；**环境自检与修复**（清理 live 里残留的本地代理占位）；一键**重置为官方账号基线**（抗损坏，写前备份） |
-| **Claude 生态联动** | 切换可同步到 **Claude 桌面版**（独立聊天 App，写 3p 网关配置）与 **VS Code Claude Code 扩展**；可选跳过 Claude Code 初次安装确认；一键打开 Claude / Codex / Grok / z-switch 配置目录 |
-| **配置安全** | 独立原始快照、一键恢复、原子写入、写前备份、Codex 双文件回滚、切换前 backfill，避免手工改动丢失 |
-| **系统集成** | 系统托盘、单实例、窗口状态记忆、开机自启、应用内检查更新（网络受限时可从「关于」页直达 Releases 手动下载）、深链 `zswitch://import` / `ccswitch://`（带确认弹窗、防覆盖）；关闭 / Alt+F4 最小化到托盘，托盘菜单「退出」才结束进程 |
-| **界面** | 左侧栏桌面式布局、可拖拽调宽侧栏、应用内设置分区页；浅色 / 深色 / 跟随系统主题 |
-| **本地代理（实验）** | `localhost` 转发请求与流式响应，运行期间热切换目标，**Claude / Codex 分客户端独立开关** + 本地活跃度显示，附超时 / 连接池 / 请求体上限 / 脱敏错误日志 |
-
----
-
-## ❤️ 赞助商
-
-感谢以下伙伴对 z-switch 的支持。本项目坚持无广告、无返利链接，赞助板块仅展示真实合作方。
-
-<table>
-  <tr>
-    <td width="180"><a href="https://ztest.ai"><img src="docs/sponsors/ztest.png" alt="真测 Ztest" width="150"></a></td>
-    <td>本项目由 <a href="https://ztest.ai">真测 Ztest（ztest.ai）</a> 出品并支持！真测是一个 AI 中转站模型验真平台，检测结果完全公开。采用 23 个探针，覆盖<b>协议、身份、能力、内容完整性、安全、性能</b>六大维度，通过交叉验证识别伪造与降智，作为独立第三方持续监测各 AI 中转站的模型真实性、响应质量与服务可用性。点击<a href="https://ztest.ai">此链接</a>了解更多！</td>
-  </tr>
-  <!--
-  复制下面这一整段 <tr>…</tr> 即可新增一个赞助商（把 LOGO、链接、名称、介绍换成对应内容）：
-  <tr>
-    <td width="180"><a href="赞助商链接"><img src="docs/sponsors/赞助商-logo.png" alt="赞助商名称" width="150"></a></td>
-    <td>感谢 赞助商名称 赞助了本项目！这里写一段介绍……点击<a href="赞助商链接">此链接</a>注册！</td>
-  </tr>
-  -->
-</table>
-
-> 想成为 z-switch 的赞助商？欢迎通过 [ztest.ai](https://ztest.ai) 与我们联系。
-
----
-
-## 快速开始
-
-### 下载安装
-
-前往 [Releases](https://github.com/ZtestAi/z-switch/releases) 下载对应平台的安装包，或参考 [开发](#开发) 从源码自行构建。
-
-> **macOS 提示「已损坏，无法打开」？** 安装包未经 Apple 公证，把 z-switch 拖进「应用程序」后在终端执行 `xattr -dr com.apple.quarantine /Applications/z-switch.app` 即可，详见 [FAQ](./docs/USAGE.md#14-常见问题-faq)。
-
-### 30 秒上手
-
-1. **首次启动** — z-switch 自动保存本机 Claude Code / Codex 原始配置，建立默认「官方账号」卡片；检测到已有中转配置会自动导入并设为当前项。
-2. **添加供应商** — 点击右上角「添加」，填写名称、Base URL 和 API Key，随后可测试连通性、拉取模型并测速。
-3. **切换** — 点击供应商卡片上的「切换」，直连模式会立即写入客户端配置。
-4. **验证（可选）** — 点「真实测试」，选择模型并发送一条最小 `Hi` 请求，实时查看回复、首字耗时与总耗时。
-
-> 真实测试会产生极少量模型调用费用；本地路由目前不提供自动重试或故障转移。
-
----
-
-## 使用指南
-
-> 📖 完整使用教程见 **[docs/USAGE.md](./docs/USAGE.md)**（安装、添加供应商、切换、本地路由代理、FAQ 等）。下面是精简流程。
-
-<details>
-<summary><strong>展开完整流程</strong></summary>
-
-1. 首次启动时，z-switch 会先保存本机 Claude Code / Codex 原始配置，并为两个应用建立默认「官方账号」卡片；检测到现有中转配置时会自动导入并设为当前项。
-2. 点击右上角「添加」，填写供应商名称、Base URL 和 API Key；随后可测试连通性、拉取模型并测速。
-3. Claude 供应商可分别配置主模型以及 Haiku、Sonnet、Opus、Fable 四个模型档位；Codex 供应商固定使用 `responses` 协议（中转站需提供 `/v1/responses`）。
-4. 保存后点击供应商卡片上的「切换」，直连模式会写入客户端配置；真实测试图标可选择模型并发送一条最小流式 `Hi` 请求。
-5. 如需运行期间热切换，可在设置中开启「本地路由代理」；高级设置提供超时、连接复用、请求体限制和错误日志。
-6. 遇到问题时，可在设置中打开错误日志目录；需要退出 z-switch 管理时，可恢复首次保存的本机原始配置。
-
-**关于「真实测试」**：每个 API 中转站卡片都提供该入口，使用已保存的地址、密钥、模型和协议，向供应商发送一条 `Hi`（最多输出 32 tokens），在独立弹窗中实时显示回复、首字耗时与总耗时。测试结果仅在本次运行中回显到卡片；请求可能产生极少量模型调用费用，测试内容、回复与密钥均**不写入日志或持久化文件**。若中转站只放行官方客户端（返回 403），可在弹窗左下角勾选「模拟 CLI 请求」后重试。
-
-</details>
-
----
-
-## 工作原理
-
-### 直连模式（默认）
-
-切换时，z-switch 直接改写客户端配置文件：
-
-- **Claude** — 合并写入 `~/.claude/settings.json` 的 `env`，保留其他顶层字段。
-- **Codex** — 写入 `~/.codex/auth.json` 与 `~/.codex/config.toml`；第二个文件写入失败时回滚 `auth`。
-- **Grok** — 整文件写入 `~/.grok/config.toml`（单文件 TOML，纯第三方、无官方卡）；升级 / 首启会自动把现有配置采纳成一张卡，切换前 backfill + 写前备份 + 原始快照三重兜底。
-- **官方账号卡片不保存 API Key** — Claude 清除中转环境变量、改用客户端本机登录；Codex 切走前保存客户端刷新后的登录态，切回时恢复。
-- **切换前 backfill** — 把当前 live 配置回填到旧供应商，避免手工修改丢失。
-- **安全删除** — 删除正在使用的供应商时，可选择恢复首次原始配置，或保留电脑当前配置、仅解除 z-switch 管理。
-
-首次运行会把原始文件完整保存在 `~/.z-switch/original/`。该快照独立于供应商列表和普通 JSON 导出，可在设置页分别恢复 Claude Code 或 Codex；恢复前仍会保存一份时间戳备份。
-
-> Claude Code 通常在下一次请求时读取新配置；Codex CLI 可能需要重启。
-
-### 本地路由模式（实验）
-
-开启后，z-switch 监听 `127.0.0.1:8899`（可由配置覆盖），并把两个客户端的 live Base URL 分别指向：
-
-- `http://127.0.0.1:8899/claude`
-- `http://127.0.0.1:8899/codex`
-
-代理会根据当前 API 中转站注入对应鉴权信息并转发请求——**不修改请求体、不做协议转换、不记录用量**。切换中转站时立即更新上游 Base URL 与鉴权信息；官方账号始终保持客户端直连，另一个应用仍可继续使用本地代理。设置页可配置连接 / 首段 / 流静默 / 非流式超时、请求体硬上限、连接池与 TCP Keepalive；流式返回与连接复用始终开启。
-
-失败请求会按设置写入 `~/.z-switch/logs/proxy-errors.jsonl`，仅记录上游状态、脱敏 URL、失败阶段和截断后的错误详情，**不记录请求正文**。日志自动脱敏当前供应商密钥并按文件大小轮转，可在设置页打开目录或清空。
-
-> **已知限制**：当前不会同步改写开启代理时已落入 live 配置的模型名。因此热切换只适用于模型兼容的供应商；跨模型切换仍需关闭代理后直连切换。该模式仍需用真实供应商持续验证路径、鉴权头和流式响应兼容性。
-
-### Claude 生态联动（可选开关）
-
-除了 Claude Code CLI（`~/.claude/settings.json`），设置页可开启让切换同步到 Claude 的其它入口，均为「跟随当前 Claude 供应商」，官方账号 / 恢复原始时自动撤回：
-
-- **Claude 桌面版（独立聊天 App，仅 macOS / Windows）** — 写桌面版 **3p 网关配置**：本地路由开着时网关指向 `…/claude`（复用代理，随热切换跟随），关着时直连供应商地址。**需重启桌面 App 才读取新配置**；未安装桌面 App 时该开关不产生任何写入。
-- **VS Code Claude Code 扩展** — 扩展有独立鉴权门槛，仅改 `settings.json` 不认；开启后写 `~/.claude/config.json` 的 `primaryApiKey`（官方账号时清除），让扩展随第三方供应商生效。
-- **跳过 Claude Code 初次安装确认** — 向 `~/.claude.json` 写 `hasCompletedOnboarding`，跳过首次运行引导。
-
-> 以上均**只做单字段增量读改写**，保留文件里的其它内容，绝不整体覆盖；任一同步失败只记日志，不影响供应商切换本身。
-
----
-
-## 数据与文件位置
-
-| 路径 | 内容 |
-| --- | --- |
-| `~/.claude/settings.json` | Claude Code CLI 配置（直连模式写入 `env`） |
-| `~/.claude/config.json` | VS Code Claude Code 扩展配置（`primaryApiKey`，开启联动时写入） |
-| `~/.claude.json` | Claude Code 根配置（`hasCompletedOnboarding`，开启「跳过初次确认」时写入） |
-| `%LOCALAPPDATA%\Claude`、`Claude-3p`（mac 为 `~/Library/Application Support/…`） | Claude 桌面版配置（开启「桌面版随切换」时写 3p 网关 profile） |
-| `~/.codex/auth.json`、`~/.codex/config.toml` | Codex 客户端配置（直连模式写入） |
-| `~/.codex/.env` | Codex 环境变量（设置网络代理时写入 z-switch 托管区块，保留用户自己的行） |
-| `~/.grok/config.toml` | Grok 客户端配置（直连模式整文件写入，单文件 TOML） |
-| `~/.z-switch/original/` | 首次运行保存的**原始配置快照**，可随时恢复 |
-| `~/.z-switch/backups/` | 每次写入前的时间戳备份 |
-| `~/.z-switch/logs/proxy-errors.jsonl` | 本地代理的脱敏错误日志（按大小轮转） |
-
----
-
-## 安全与隐私
-
-- 所有数据均保存在**本地**，无云端上传、无遥测。
-- 真实测试的**内容、模型回复与 API Key 不写入任何持久化文件**。
-- 代理错误日志自动**脱敏密钥**，且不记录请求正文。
-- 所有配置写入均为**原子操作**并在写前备份，最大限度避免破坏原有环境。
-- 项目**无广告、无返利链接**，官方账号卡片不保存任何 API Key。
-
----
-
-## 开发
-
-**环境要求**
-
-- Node.js `20.19+` 或 `22.12+`
-- Rust stable
-- Windows 需安装 Tauri 所需的 WebView2 与 MSVC 构建工具
-
-**本地运行**
-
-```bash
-npm install
+```powershell
+npm ci
+pwsh -File scripts/prepare-mihomo.ps1
 npm run tauri dev
+npm run check
+npm test
+cargo test --manifest-path src-tauri/Cargo.toml
+npm run bindings:check
+npm run tauri -- build --bundles nsis
 ```
 
-**常用检查**
+前端界面预览：`npm run dev`，打开 `http://127.0.0.1:1420/?preview=default`。仅开发模式且显式携带 preview 参数时使用固定演示场景。普通浏览器无该参数时说明需桌面运行；正式包不存在模拟成功回退。
 
-```bash
-npm run build
+开发场景：default、partial、failure、refresh-failure、interrupted、recovery。生产 App 由原生接口读取真实 Windows 事实，读写检查点；不在预检中修改网络、安装或启动 Claude。
 
-cd src-tauri
-cargo clippy --all-targets --all-features
-cargo test
-```
+## 当前范围
 
-**构建可执行文件**
+- 单应用根目录：src、src-tauri、docs、scripts。旧云端与模型中转实现已退出活动源码与依赖。
+- 六阶段导航已建立，环境预检与节点导入已实现；后续阶段尚未交付。
+- 支持 Clash YAML、Base64 URI 订阅和 SS/VMess/VLESS/Trojan；HTTP(S) 地址下载为订阅内容，Mihomo provider API 校验后导入，按连接配置去重。
+- Mihomo v1.19.34 随包提供，按需启动并自动退出；四路并发检测通过 delay API 和节点独立监听端口读取 Cloudflare trace 的真实出口 IP、国家/地区。失败不生成位置。
+- 节点面板固定高度，列表内部滚动；开发预览不获取订阅、不模拟订阅成功。
+- 已安装、已检测、已验证、未知与可选分开；浏览器/应用存在不代表网络路径已验证。
+- 旧 CLI、DNS、IPv6 备份恢复有确认与冲突检查。缺少可信原值/归属的旧 Desktop 与插件配置明确要求人工核对，不猜测恢复，不删除用户登录或项目。
+- 关闭初始化窗口即退出；重开重新读取事实，上次 scanning 记录识别为中断；不生成假的正式基线。
 
-```bash
-npm run tauri build -- --no-bundle
-```
+## 构建与打包
 
----
+Windows CI 在检查、Rust 测试与绑定校验通过后构建 NSIS 安装包并上传 artifact；v* 标签触发 GitHub Release。Mihomo 下载固定版本并校验 SHA256，二进制与本地 docs 不进入 Git。Mihomo 为 GPL-3.0，发行包附带许可证及对应源码链接。
 
-## 项目结构
-
-```text
-src/                        前端（React 19 + TypeScript）
-  App.tsx                   主界面（左侧栏布局）、切换、深链和状态同步
-  ProviderModal.tsx         供应商表单、连通性、密钥和模型选择
-  SettingsModal.tsx         主题、自启、分客户端路由、恢复与迁移等设置
-  CcswitchImportModal.tsx   从 cc-switch 扫描并勾选导入
-  providerFactory.ts        Provider 构建器（Claude/Codex/Grok）和地址推断规则
-  api.ts / types.ts         Tauri 命令封装与前端类型
-
-src-tauri/src/              后端（Rust + Tauri 2）
-  lib.rs                    Tauri 命令、状态和切换流程
-  config.rs                 路径与原子写入
-  store.rs                  providers.json 数据模型
-  live.rs                   Claude/Codex/Grok live 配置读写
-  original.rs               首次原始配置快照与恢复
-  official.rs               官方账号登录态保护（Codex auth.json 保存 / 恢复）
-  proxy.rs                  本地代理和分客户端热切换目标
-  proxy_log.rs              本地代理脱敏错误日志
-  ccswitch.rs               从 cc-switch 导入（SQLite 优先、config.json 回退）
-  repair.rs                 环境自检：检测 live 里的本地代理占位残留
-  claude_ext.rs             VS Code 扩展放行 + 跳过初次确认
-  claude_desktop.rs         Claude 桌面版 3p 网关配置写盘
-  connectivity.rs           HTTP 连通性检查与测速
-  model_fetch.rs            模型列表拉取
-  stream_test.rs            真实流式调用测试（可模拟 Claude Code / Codex CLI 请求）
-  tray.rs                   系统托盘
-```
-
----
-
-## 致谢
-
-- [**cc-switch**](https://github.com/farion1231/cc-switch)（MIT，Copyright © 2025 Jason Young）—— z-switch 的设计与实现参考了该项目，特此致谢。
-- 本项目接受 [**LINUX DO**](https://linux.do) 社区佬友的监督与反馈，感谢每一位提出建议的朋友。
-
-## 许可
-
-本项目基于 [MIT License](./LICENSE) 开源，可自由用于个人与商业用途，只需保留版权与许可声明。
-
-项目参考了同为 MIT 许可的 cc-switch，其原始版权声明已一并保留在 [`LICENSE`](./LICENSE) 中。
-
-## Star History
-
-<a href="https://star-history.com/#ZtestAi/z-switch&Date">
-  <img src="https://api.star-history.com/svg?repos=ZtestAi/z-switch&type=Date" alt="Star History Chart" width="600" />
-</a>
-
----
-
-<div align="center">
-
-由 **真测 Ztest** 用心打造 · [ztest.ai](https://ztest.ai)
-
-如果这个项目对你有帮助，欢迎点一个 ⭐️
-
-</div>
+原桌面 Git 历史与远程保留。旧源码及服务端移出活动工程归档，位置见实施记录。第三方来源与许可保留；不为上游同步保留平行 UI。旧历史测试不代表当前网络保护或后续六步验收。

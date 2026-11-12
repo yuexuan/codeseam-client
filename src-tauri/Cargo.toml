@@ -1,39 +1,34 @@
 [package]
-name = "z-switch"
-version = "0.5.0"
-description = "CodeSeam Windows managed coding service client"
-authors = ["ztest.ai"]
+name = "codeseam"
+version = "0.5.1"
+description = "CodeSeam local Windows environment manager"
+authors = ["CodeSeam"]
 edition = "2021"
 
 [lib]
-name = "z_switch_lib"
+name = "codeseam_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-shadowsocks-service = { version = "=1.24.0", default-features = false, features = ["local-http", "aead-cipher"] }
-shadowsocks = { version = "=1.24.0", default-features = false }
-base64 = "0.22"
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
-tauri-plugin-window-state = "2"
-tauri-plugin-deep-link = "2"
+tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = "1"
 dirs = "5"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
-axum = "0.8"
-tokio = { version = "1", features = ["net", "rt", "sync"] }
-futures-util = "0.3"
-tokio-tungstenite = "0.28"
-rusqlite = { version = "0.40.1", features = ["bundled"] }
+base64 = "0.22"
+url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "socks"] }
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["sync", "rt", "time"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive"] }
+specta-typescript = "0.0.9"
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Registry", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_System_Registry", "Win32_UI_Shell", "Win32_System_SystemInformation"] }
 
-[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
-tauri-plugin-autostart = "2"
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

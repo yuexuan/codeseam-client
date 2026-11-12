@@ -1,0 +1,143 @@
+:root {
+  color-scheme: light;
+
+  --text: #22252b;
+  --secondary: #4e515a;
+  --muted: #62646d;
+  --brand: #b87324;
+  --brand-strong: #925615;
+  --on-primary: #fff;
+  --success: #237a30;
+  --warning: #a65a08;
+  --danger: #ae3932;
+  --surface: rgb(255 255 255 / 60%);
+  --surface-solid: #faf7f4;
+  --surface-hover: rgb(255 255 255 / 85%);
+  --line: rgb(172 153 140 / 27%);
+  --line-strong: rgb(130 124 125 / 35%);
+  --separator: rgb(162 146 140 / 10%);
+  --hover: rgb(118 98 80 / 10%);
+  --overlay: rgb(35 30 25 / 30%);
+  --badge-fill: #ffe7d1;
+  --selected-surface: rgb(255 229 207 / 58%);
+  --selected-line: rgb(255 255 255 / 90%);
+  --connected-surface: #d8efca;
+  --nodes-brand: #ef7900;
+  --nodes-brand-strong: #ad4b00;
+  --nodes-primary-fill: linear-gradient(180deg, #ffa135, #ce6200);
+  --nodes-background:
+    radial-gradient(ellipse at 82% 43%, #ebe4f180, transparent 62%),
+    radial-gradient(ellipse at 15% 75%, #f9e4ea90, transparent 55%),
+    linear-gradient(125deg, #faede7, #f7edf1 52%, #fbe8df);
+  --primary-fill: linear-gradient(180deg, #ec9a43, #b56212);
+  --success-fill: linear-gradient(150deg, #7ec845, #19770e);
+  --app-background:
+    radial-gradient(ellipse at 2% 25%, #fae9df80, transparent 55%),
+    radial-gradient(ellipse at 97% 85%, #f9e2d880, transparent 65%),
+    linear-gradient(125deg, #f6efed, #f2eff4 50%, #faf0e9);
+  --shadow: 0 2px 7px rgb(65 43 26 / 6%);
+  --inset: inset 0 1px 0 rgb(255 255 255 / 90%);
+  --blur: 20px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.75rem;
+  --font-xs: 0.8rem;
+  --font-sm: 1rem;
+  --font-base: 1.05rem;
+  --font-lg: 1.2rem;
+  --font-xl: 1.5rem;
+  --font-title: 1.9rem;
+  --title-tracking: -0.03em;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 30px;
+  --titlebar-height: clamp(48px, 5vw, 76px);
+  --page-gutter: clamp(24px, 3.9vw, 60px);
+  --step-gutter: clamp(40px, 10.4vw, 160px);
+  --step-size: 2.1rem;
+  --logo-size: 2.6rem;
+  --window-button-width: 48px;
+  --window-button-height: 36px;
+  --icon-button: 3.6rem;
+  --icon-button-height: 2.55rem;
+  --logo-gutter: clamp(24px, 2.35vw, 36px);
+  --summary-pad: 3.6rem;
+  --summary-gap: 2.25rem;
+  --summary-text-pad: 2.5rem;
+  --action-width: 10.5rem;
+  --summary-height: 7.5rem;
+  --summary-symbol: 3.8rem;
+  --card-height: 10.5rem;
+  --row-height: 2.2rem;
+  --row-icon: 2.4rem;
+  --empty-height: 6rem;
+  --runtime-indent: 2rem;
+  --dialog-width: 30rem;
+  --detail-hit: 24px;
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  font-size: clamp(13px, 1.18vw, 18px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --text: #f4efea;
+    --secondary: #ddd3cb;
+    --muted: #c0b4ac;
+    --surface: rgb(49 44 42 / 85%);
+    --surface-solid: #312c2a;
+    --surface-hover: #443c37;
+    --line: rgb(224 198 178 / 25%);
+    --line-strong: rgb(224 198 178 / 40%);
+    --separator: rgb(224 198 178 / 12%);
+    --app-background: #211f1e;
+    --brand: #dfab70;
+    --brand-strong: #efbb7e;
+    --success: #8bc787;
+    --warning: #edb66c;
+    --danger: #ffaba4;
+    --badge-fill: #483323;
+    --selected-surface: #483323;
+    --selected-line: #76543a;
+    --connected-surface: #24432b;
+    --nodes-background: #211f1e;
+    --nodes-brand: #dfab70;
+    --nodes-brand-strong: #efbb7e;
+    --inset: inset 0 1px 0 rgb(255 255 255 / 8%);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface: var(--surface-solid);
+    --blur: 0;
+  }
+}
+@media (forced-colors: active) {
+  :root {
+    --text: CanvasText;
+    --secondary: CanvasText;
+    --muted: CanvasText;
+    --surface: Canvas;
+    --surface-solid: Canvas;
+    --line: CanvasText;
+    --line-strong: CanvasText;
+    --app-background: Canvas;
+    --brand: Highlight;
+    --brand-strong: Highlight;
+    --primary-fill: Highlight;
+    --success-fill: Highlight;
+    --on-primary: HighlightText;
+    --success: CanvasText;
+    --warning: CanvasText;
+    --danger: CanvasText;
+    --badge-fill: Canvas;
+    --selected-surface: Canvas;
+    --selected-line: Highlight;
+    --connected-surface: Canvas;
+    --nodes-background: Canvas;
+  }
+}

@@ -1,0 +1,389 @@
+.dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+.nodeChoice input {
+  width: 1.4rem;
+  height: 1.4rem;
+  margin: 0;
+  accent-color: var(--brand-strong);
+  cursor: pointer;
+}
+.proxyForm input {
+  font-size: 1.1rem;
+  min-height: 3.2rem;
+}
+.tabs svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.header {
+  margin: 0 0 1rem 0.7rem;
+}
+.header h1 {
+  margin: 0 0 0.2rem;
+  font-size: 2.25rem;
+  line-height: 1.2;
+  letter-spacing: var(--title-tracking);
+}
+.header p {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.59fr) minmax(0, 1fr);
+  gap: 1rem;
+  height: 42rem;
+  min-height: 0;
+}
+.nodes {
+  padding: 0.6rem 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+.layout h2 {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.65;
+}
+.layout h2 > svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--brand);
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  margin-top: 0.55rem;
+}
+.tabs button {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.4rem 2rem 0.65rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 1.3rem;
+  cursor: pointer;
+}
+.tabs button[aria-selected='true'] {
+  color: var(--brand-strong);
+  border-bottom-color: var(--brand);
+  font-weight: 700;
+}
+
+.importArea {
+  min-height: 9.85rem;
+  padding-block: 0.85rem 1.5rem;
+  display: grid;
+  align-content: start;
+}
+.clashForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  align-items: end;
+}
+.layout input:not([type='radio']),
+.layout textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 0.7rem;
+}
+.layout input::placeholder,
+.layout textarea::placeholder {
+  color: var(--muted);
+}
+.clashForm textarea {
+  min-height: 7.1rem;
+  resize: none;
+  font-size: 1.05rem;
+}
+.importButton {
+  min-width: 7.2rem;
+  padding: 0.55rem 0.7rem;
+  min-height: 3rem;
+  font-size: 1.15rem;
+}
+.clashForm .importButton {
+  margin-bottom: 0.5rem;
+}
+.protocols {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+  color: var(--secondary);
+}
+.protocols span {
+  margin-right: 0.7rem;
+}
+.protocols button {
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+.protocols button[aria-pressed='true'] {
+  color: var(--brand-strong);
+  border-color: var(--brand);
+  background: var(--selected-surface);
+}
+.proxyForm {
+  display: grid;
+  grid-template-columns:
+    minmax(7rem, 1.65fr) minmax(3.6rem, 0.64fr) minmax(5.8rem, 1.05fr)
+    minmax(5.8rem, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding: 0.6rem 0 0.8rem;
+}
+.listHeader h2 > svg {
+  color: var(--muted);
+}
+.testButton {
+  padding: 0.3rem 1rem;
+  font-size: 1.15rem;
+}
+.nodeList {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+.nodeRow {
+  display: flex;
+  align-items: center;
+  min-height: 2.65rem;
+  border-bottom: 1px solid var(--separator);
+  border-radius: 0;
+  font-size: 1.2rem;
+}
+.selected {
+  background: var(--selected-surface);
+  border: 1px solid var(--selected-line);
+  border-radius: var(--radius-sm);
+}
+.nodeChoice {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1.6fr) minmax(0, 1fr) 10.8rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.3rem 0.7rem 0.3rem 1.15rem;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.nodeName {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.flag {
+  width: 2rem;
+  height: 1.35rem;
+  object-fit: cover;
+  border-radius: 0.2rem;
+}
+.region {
+  overflow-wrap: anywhere;
+}
+.latency {
+  color: var(--muted);
+  font-weight: 600;
+}
+.good {
+  color: var(--success);
+  font-weight: 700;
+}
+.deleteButton,
+.dialogClose {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.deleteButton:hover {
+  color: var(--danger);
+}
+.side {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  min-width: 0;
+}
+.runtime,
+.current {
+  padding: 0.6rem 1.8rem 0.9rem;
+}
+.runtime {
+  min-height: 10.6rem;
+}
+.layout dl {
+  margin: 0.65rem 0 0;
+}
+.layout dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.85rem;
+  font-size: 1.2rem;
+}
+.layout dl > div + div {
+  border-top: 1px solid var(--separator);
+}
+.layout dt {
+  flex-shrink: 0;
+}
+.layout dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.currentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.connected {
+  padding: 0.2rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--connected-surface);
+  color: var(--success);
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--muted);
+}
+.error,
+.notice {
+  min-height: 1.2rem;
+  flex-shrink: 0;
+  font-size: var(--font-xs);
+  margin: -0.7rem 0 0.7rem;
+  overflow-wrap: anywhere;
+}
+.error {
+  color: var(--danger);
+}
+.notice {
+  color: var(--success);
+}
+.dialog {
+  background: var(--surface-solid);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  width: min(28rem, 90vw);
+  padding: 1.5rem;
+  position: relative;
+}
+.dialog h2 {
+  margin: 0;
+}
+.dialog p {
+  overflow-wrap: anywhere;
+}
+
+.dialog > div button {
+  min-width: 6rem;
+}
+.dialogClose {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.5rem;
+}
+@media (width <= 1100px) {
+  .nodes {
+    padding-inline: 1rem;
+  }
+  .tabs button {
+    padding-inline: 1.25rem;
+  }
+  .proxyForm {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+  .proxyForm .importButton {
+    grid-column: 2;
+  }
+  .importArea {
+    min-height: 10.5rem;
+  }
+  .nodeChoice {
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+    grid-template-columns: 1.5rem minmax(0, 1.5fr) minmax(0, 1fr) 4.5rem;
+  }
+  .runtime,
+  .current {
+    padding-inline: 1rem;
+  }
+}
+@media (width <= 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .nodes {
+    height: 42rem;
+  }
+  .side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto;
+  }
+  .currentHeader {
+    flex-wrap: wrap;
+  }
+}
+
+.dialog::backdrop {
+  background: var(--overlay);
+}

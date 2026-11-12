@@ -1,21 +1,25 @@
-CodeSeam Windows MVP 0.5.0
+CodeSeam 0.5.1 - Local Windows Environment Preflight
 
-Client source: https://github.com/yuexuan/codeseam-client/tree/dev
-Based on Z-Switch (MIT). See LICENSE.
-Server source: https://github.com/yuexuan/codeseam-server/tree/dev
-Based on Sub2API (LGPL-3.0); the server is not bundled in this installer.
+Source history: https://github.com/yuexuan/codeseam-client
+Based in part on Z-Switch (MIT). Original copyright and LICENSE retained.
+Legacy server code based on Sub2API (LGPL-3.0) is archived separately and is
+not included in this desktop application or installer.
 
-Configure the service HTTPS origin and Portal URL in Settings. HTTP is only
-allowed for loopback development. No user account, API key or proxy password
-is bundled. Claude Code must be installed separately.
+This first draft contains read-only local preflight and recovery of known
+managed configuration backups. No CodeSeam cloud account, API relay, service
+activation, portal or billing service is required. No user account, API key
+or proxy password is bundled. Claude login remains in official applications.
 
-Sessions and original Claude settings are protected with Windows CurrentUser
-DPAPI under %LOCALAPPDATA%/CodeSeam. Closing CodeSeam stops the local proxy
-and managed Claude terminal; restarting renews the session. Logout restores
-original managed Claude fields while preserving unrelated settings.
-Uninstall restores managed fields and clears the saved session. If fields
-have changed externally, restore/reconcile them in CodeSeam before uninstall.
+Known encrypted backups use Windows CurrentUser DPAPI in
+%LOCALAPPDATA%/CodeSeam. Unknown formats, decryption failures or external
+configuration conflicts are reported; backups are retained. Recovery requires
+confirmation. Uninstall stops when unresolved managed records remain.
 
-Network diagnostics report observed coverage. Non-API process protection and
-real dedicated public egress have not been certified by this MVP package.
-No upstream Z-Switch updater is enabled.
+This release does not implement the remaining five setup stages, a production
+baseline, Guest management, or complete process network protection. Installed
+applications and detected configuration are not claims of verified routing.
+No upstream updater or cloud telemetry is enabled.
+
+Includes Mihomo v1.19.34 (GPL-3.0), bundled as a separate executable.
+Source and corresponding release: https://github.com/MetaCubeX/mihomo/tree/v1.19.34
+License: MIHOMO-LICENSE. No modifications to Mihomo.

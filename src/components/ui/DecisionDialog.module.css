@@ -1,0 +1,20 @@
+.dialog {
+  color: var(--text);
+  max-width: var(--dialog-width);
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+}
+.dialog::backdrop {
+  background: var(--overlay);
+}
+.dialog h2 {
+  margin-top: 0;
+}
+.dialog div {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
