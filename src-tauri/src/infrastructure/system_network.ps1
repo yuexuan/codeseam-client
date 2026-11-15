@@ -19,13 +19,14 @@ function Get-State {
         $enabled = $null; if ($b) { $enabled = [bool]$b.Enabled }
         [pscustomobject]@{ id=$id; index=[int]$a.ifIndex; name=[string]$a.Name; description=[string]$a.InterfaceDescription; status=[string]$a.Status; physical=[bool]$a.HardwareInterface; ipv6Enabled=$enabled; dnsAvailable=($dns.Count -gt 0); dns4=@($dns | Where-Object AddressFamily -eq 2 | ForEach-Object { $_.ServerAddresses }); dns6=@($dns | Where-Object AddressFamily -eq 23 | ForEach-Object { $_.ServerAddresses }); static4=@(Addresses $s4.NameServer); static6=@(Addresses $s6.NameServer) }
     })
+    $timeService = Get-CimInstance Win32_Service -Filter "Name='W32Time'"
     $reg = Get-ItemProperty -LiteralPath $ipv6Key -Name DisabledComponents -ErrorAction SilentlyContinue
     $dohSupported = [bool](Get-Command Get-DnsClientDohServerAddress -ErrorAction SilentlyContinue)
     $doh = @(); if ($dohSupported) { $doh = @(Get-DnsClientDohServerAddress | ForEach-Object { [pscustomobject]@{ server=[string]$_.ServerAddress; template=[string]$_.DohTemplate; autoUpgrade=[bool]$_.AutoUpgrade; fallback=[bool]$_.AllowFallbackToUdp } }) }
     $routes = @(Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '::/0' -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ index=$_.InterfaceIndex; nextHop=$_.NextHop; metric=$_.RouteMetric } })
     $addresses = @(Get-NetIPAddress -AddressFamily IPv6 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^fe80:|^::1$' } | ForEach-Object { [pscustomobject]@{ index=$_.InterfaceIndex; address=$_.IPAddress } })
     $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-    [pscustomobject]@{ adapters=$adapters; ipv6RegistryExists=($null -ne $reg); ipv6RegistryValue=if($reg){[long]$reg.DisabledComponents}else{$null}; ipv6Routes=$routes; ipv6Addresses=$addresses; dohSupported=$dohSupported; doh=$doh; administrator=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); build=[Environment]::OSVersion.Version.Build; bootTime=([DateTimeOffset](Get-CimInstance Win32_OperatingSystem).LastBootUpTime).ToUnixTimeSeconds(); nrptRules=@(Get-DnsClientNrptPolicy -Effective -ErrorAction SilentlyContinue).Count }
+    [pscustomobject]@{ timeSync=[pscustomobject]@{running=($timeService.State -eq 'Running');startMode=$timeService.StartMode}; timezone=(Get-TimeZone).Id; adapters=$adapters; ipv6RegistryExists=($null -ne $reg); ipv6RegistryValue=if($reg){[long]$reg.DisabledComponents}else{$null}; ipv6Routes=$routes; ipv6Addresses=$addresses; dohSupported=$dohSupported; doh=$doh; administrator=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); build=[Environment]::OSVersion.Version.Build; bootTime=([DateTimeOffset](Get-CimInstance Win32_OperatingSystem).LastBootUpTime).ToUnixTimeSeconds(); nrptRules=@(Get-DnsClientNrptPolicy -Effective -ErrorAction SilentlyContinue).Count }
 }
 function Find-Adapter($state, $id) {
     $a = @($state.adapters | Where-Object id -eq $id)
@@ -36,6 +37,16 @@ function Current-Doh($state, $server) { @($state.doh | Where-Object server -eq $
 function Desired-Doh($server) { [pscustomobject]@{server=$server;template=$Request.profile.template;autoUpgrade=$true;fallback=$false} }
 function Check-Guard($state, [bool]$restore) {
     $before = $Request.before
+    if($Request.action -eq 'enable_time_sync') {
+        $sameOld=Same $state.timeSync $before.timeSync
+        $sameNew=$state.timeSync.running -and $state.timeSync.startMode -eq 'Auto'
+        if(!$sameOld -and !($restore -and $sameNew)){throw '时间服务已被其他程序修改，停止覆盖'}
+        return
+    }
+    if($Request.action -eq 'set_timezone') {
+        if($state.timezone -ne $before.timezone -and !($restore -and $state.timezone -eq $Request.timezone)) { throw '时区已被其他程序修改，停止覆盖' }
+        return
+    }
     if(!$restore -and $Request.action -eq 'disable_ipv6') {
         $current=@($state.adapters | Where-Object { $null -ne $_.ipv6Enabled -and $_.status -ne 'Not Present' } | ForEach-Object {$_.id} | Sort-Object)
         if(!(Same $current @($Request.adapterIds | Sort-Object))){throw '可配置网卡列表已变化，请重新检测并预览'}
@@ -78,6 +89,14 @@ function Set-Doh($server, $value) {
 }
 function Restore-Settings {
     Check-Guard (Get-State) $true
+    if($Request.action -eq 'enable_time_sync') {
+        if(!$Request.before.timeSync.running){Stop-Service W32Time -Force}
+        $startup=switch($Request.before.timeSync.startMode){'Auto'{'Automatic'} 'Manual'{'Manual'} 'Disabled'{'Disabled'}}
+        Set-Service W32Time -StartupType $startup
+        if($Request.before.timeSync.running){Start-Service W32Time}
+        return
+    }
+    if($Request.action -eq 'set_timezone') { Set-TimeZone -Id $Request.before.timezone; return }
     if($Request.action -eq 'disable_ipv6') {
         foreach($id in $Request.adapterIds) { $old=Find-Adapter $Request.before $id; Set-Binding $id ([bool]$old.ipv6Enabled) }
         if($Request.before.ipv6RegistryExists) { New-ItemProperty -LiteralPath $ipv6Key -Name DisabledComponents -Value ([long]$Request.before.ipv6RegistryValue) -PropertyType DWord -Force | Out-Null }
@@ -98,6 +117,16 @@ function Restore-Settings {
     }
 }
 function Verify-Settings($state, [bool]$restore) {
+    if($Request.action -eq 'enable_time_sync') {
+        if($restore){if(!(Same $state.timeSync $Request.before.timeSync)){throw '时间服务恢复复查失败'}}
+        elseif(!$state.timeSync.running -or $state.timeSync.startMode -ne 'Auto'){throw '时间服务开启复查失败'}
+        return
+    }
+    if($Request.action -eq 'set_timezone') {
+        $desired=if($restore){$Request.before.timezone}else{$Request.timezone}
+        if($state.timezone -ne $desired){throw '时区复查失败'}
+        return
+    }
     foreach($id in $Request.adapterIds) {
         $now=Find-Adapter $state $id; $old=Find-Adapter $Request.before $id
         if($Request.action -eq 'disable_ipv6') {
@@ -143,7 +172,9 @@ try {
     if($Request.doh -and !$state.dohSupported){throw '此 Windows 版本不支持原生 DoH，已拒绝加密 DNS 修改'}
     Check-Guard $state $false
     try {
-        if($Request.action -eq 'disable_ipv6') {
+        if($Request.action -eq 'enable_time_sync') { Set-Service W32Time -StartupType Automatic; Start-Service W32Time }
+        elseif($Request.action -eq 'set_timezone') { Set-TimeZone -Id $Request.timezone }
+        elseif($Request.action -eq 'disable_ipv6') {
             foreach($id in $Request.adapterIds){Set-Binding $id $false}
             New-ItemProperty -LiteralPath $ipv6Key -Name DisabledComponents -Value 255 -PropertyType DWord -Force | Out-Null
         } else {
@@ -163,4 +194,4 @@ try {
         [pscustomobject]@{ok=$false;error=$reason;rolledBack=$rolledBack;rollbackError=$rollbackError} | ConvertTo-Json -Depth 25 -Compress
         exit 1
     }
-} catch { [pscustomobject]@{ok=$false;error=$_.Exception.Message} | ConvertTo-Json -Depth 10 -Compress; exit 1 }
+} catch { [pscustomobject]@{ok=$false;error=$_.Exception.Message;unchanged=($Request.op -eq 'apply')} | ConvertTo-Json -Depth 10 -Compress; exit 1 }

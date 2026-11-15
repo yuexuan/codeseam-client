@@ -4,6 +4,8 @@ mod domain;
 mod infrastructure;
 fn bindings() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::new().commands(tauri_specta::collect_commands![
+        commands::claude_cleanup,
+        commands::prepare_browser,
         commands::read_startup,
         commands::scan_environment,
         commands::restore_legacy,
@@ -12,7 +14,14 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
         commands::import_proxy,
         commands::select_node,
         commands::remove_node,
-        commands::test_nodes
+        commands::test_nodes,
+        commands::clear_nodes,
+        commands::read_runtime,
+        commands::virtual_operation,
+        commands::read_hyperv_compatibility,
+        commands::confirm_native_runtime,
+        commands::apply_runtime_setting,
+        commands::open_runtime_setting
     ])
 }
 pub fn network_helper(token: &str) -> i32 {

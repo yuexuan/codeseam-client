@@ -26,9 +26,19 @@ pub fn inventory() -> Result<Vec<RecoveryItem>, String> {
     let dir = vault::dir()?;
     for (file, label, action) in [
         (
+            "system-time-sync-backup.dpapi",
+            "时间同步",
+            RecoveryAction::TimeSync,
+        ),
+        (
             "system-ipv6-backup.dpapi",
             "系统 IPv6",
             RecoveryAction::Ipv6,
+        ),
+        (
+            "system-timezone-backup.dpapi",
+            "系统时区",
+            RecoveryAction::Timezone,
         ),
         ("system-dns-backup.dpapi", "系统 DNS", RecoveryAction::Dns),
     ] {

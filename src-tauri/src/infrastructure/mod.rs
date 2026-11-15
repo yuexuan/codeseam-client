@@ -1,3 +1,4 @@
+pub(crate) mod installation_image;
 pub(crate) mod network_recovery;
 pub(crate) mod vault;
 pub(crate) mod windows;

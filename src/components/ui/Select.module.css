@@ -1,0 +1,10 @@
+.select {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2);
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}

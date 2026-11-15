@@ -1,6 +1,8 @@
+pub(crate) mod claude;
 pub(crate) mod legacy_cli;
 pub(crate) mod nodes;
 pub(crate) mod recovery;
+pub(crate) mod runtime;
 pub(crate) mod state;
 use crate::{
     domain::{Report, ScanPhase},
@@ -83,3 +85,6 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+pub(crate) mod virtual_runtime;
+
+pub(crate) mod browser;

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 pub mod nodes;
+pub mod runtime;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -71,6 +72,8 @@ impl AppError {
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RecoveryAction {
+    TimeSync,
+    Timezone,
     Cli,
     #[serde(rename = "ipv6")]
     Ipv6,

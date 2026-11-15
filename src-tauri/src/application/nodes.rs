@@ -23,6 +23,18 @@ struct Record {
     summary: NodeSummary,
     config: serde_json::Value,
 }
+// 保护短时读写事务，不锁定网络请求。
+static TEST_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+struct TestSession;
+impl Drop for TestSession {
+    fn drop(&mut self) {
+        TEST_RUNNING.store(false, std::sync::atomic::Ordering::Release);
+    }
+}
+static STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+fn store_lock() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    STORE_LOCK.lock().map_err(|_| "节点记录正忙，请重试".into())
+}
 fn load() -> Result<Store, String> {
     match vault::read("proxy-nodes-v1.dpapi")? {
         Some(bytes) => {
@@ -38,18 +50,54 @@ fn save(store: &Store) -> Result<(), String> {
     )
 }
 pub fn has_nodes() -> Result<bool, String> {
+    let _guard = store_lock()?;
     Ok(!load()?.nodes.is_empty())
 }
 pub fn read() -> Result<NodeSnapshot, String> {
+    let _guard = store_lock()?;
     let store = load()?;
     Ok(NodeSnapshot {
         nodes: store.nodes.into_iter().map(|r| r.summary).collect(),
         selected_id: store.selected_id,
         runtime: ProxyRuntime {
-            running: Some(false),
+            running: Some(TEST_RUNNING.load(std::sync::atomic::Ordering::Acquire)),
             version: Some(mihomo::VERSION.into()),
         },
     })
+}
+pub(crate) fn virtual_node_config() -> Result<serde_json::Value, String> {
+    let _guard = store_lock()?;
+    let store = load()?;
+    let item = store
+        .nodes
+        .iter()
+        .find(|n| Some(&n.summary.id) == store.selected_id.as_ref())
+        .ok_or("请先选择节点")?;
+    if item.summary.status != "connected" {
+        return Err("请先测试所选节点".into());
+    }
+    Ok(native_config(item))
+}
+pub(crate) fn with_selected<T>(
+    expected: &NodeSummary,
+    action: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let _guard = store_lock()?;
+    let store = load()?;
+    let actual = store
+        .nodes
+        .iter()
+        .find(|n| Some(&n.summary.id) == store.selected_id.as_ref())
+        .map(|n| &n.summary);
+    if actual
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|e| e.to_string())?
+        != Some(serde_json::to_value(expected).map_err(|e| e.to_string())?)
+    {
+        return Err("所选出口已变化，请重新检测后确认".into());
+    }
+    action()
 }
 fn record(name: String, protocol: String, config: serde_json::Value) -> Record {
     let id = format!(
@@ -70,6 +118,7 @@ fn record(name: String, protocol: String, config: serde_json::Value) -> Record {
             latency: None,
             exit_ip: None,
             status: "untested".into(),
+            error: None,
         },
         config,
     }
@@ -92,6 +141,7 @@ pub fn validate_proxy(proxy: &GeneralProxy) -> Result<(), String> {
 }
 pub fn import_proxy(proxy: GeneralProxy) -> Result<ImportResult, String> {
     validate_proxy(&proxy)?;
+    let _guard = store_lock()?;
     let mut store = load()?;
     let item = record(
         format!("{}:{}", proxy.server, proxy.port),
@@ -217,8 +267,8 @@ pub fn import_links(links: String) -> Result<ImportResult, String> {
             .timeout(Duration::from_secs(20))
             .build()
             .map_err(|_| "无法创建订阅请求")?;
-        // Some subscription gateways only recognize legacy Clash client UAs.
-        // Keep Mihomo negotiation first, retry incompatible format negotiation once.
+        // 部分订阅网关只识别旧版 Clash 客户端标识。
+        // 优先协商 Mihomo 格式；格式协商不兼容时再重试一次。
         let request = |agent: &str| {
             client
                 .get(url.clone())
@@ -260,6 +310,7 @@ pub fn import_links(links: String) -> Result<ImportResult, String> {
     for i in 0..records.len() {
         engine.node(i)?;
     }
+    let _guard = store_lock()?;
     let mut store = load()?;
     merge(&mut store, records)
 }
@@ -374,6 +425,7 @@ fn merge(store: &mut Store, records: Vec<Record>) -> Result<ImportResult, String
     Ok(result)
 }
 pub fn select(id: String) -> Result<(), String> {
+    let _guard = store_lock()?;
     let mut store = load()?;
     if !store.nodes.iter().any(|r| r.summary.id == id) {
         return Err("节点已不存在，请重新选择".into());
@@ -382,6 +434,7 @@ pub fn select(id: String) -> Result<(), String> {
     save(&store)
 }
 pub fn remove(id: String) -> Result<(), String> {
+    let _guard = store_lock()?;
     let mut store = load()?;
     store.nodes.retain(|r| r.summary.id != id);
     if store.selected_id.as_ref() == Some(&id) {
@@ -389,84 +442,183 @@ pub fn remove(id: String) -> Result<(), String> {
     }
     save(&store)
 }
+pub fn clear() -> Result<(), String> {
+    let _guard = store_lock()?;
+    save(&Store::default())
+}
 #[cfg(test)]
 pub fn test() -> Result<(), String> {
     test_with_progress(|_| {})
 }
+#[cfg(test)]
 pub fn test_with_progress(progress: impl Fn(NodeSnapshot)) -> Result<(), String> {
-    let mut store = load()?;
+    test_ordered_with_progress(Vec::new(), progress)
+}
+pub fn test_ordered_with_progress(
+    ids: Vec<String>,
+    progress: impl Fn(NodeSnapshot),
+) -> Result<(), String> {
+    let mut store = {
+        let _guard = store_lock()?;
+        load()?
+    };
+    let ranks: std::collections::HashMap<_, _> =
+        ids.iter().enumerate().map(|(i, id)| (id, i)).collect();
+    store
+        .nodes
+        .sort_by_key(|node| ranks.get(&node.summary.id).copied().unwrap_or(usize::MAX));
     if store.nodes.is_empty() {
         return Ok(());
     }
+    TEST_RUNNING
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::AcqRel,
+            std::sync::atomic::Ordering::Acquire,
+        )
+        .map_err(|_| "节点测速正在执行")?;
+    let session = TestSession;
     let configs = store.nodes.iter().map(native_config).collect::<Vec<_>>();
     let engine = mihomo::Engine::start(&configs)?;
     for item in &mut store.nodes {
-        item.summary.status = "testing".into();
+        item.summary.status = "queued".into();
+        item.summary.error = None;
         item.summary.latency = None;
         item.summary.region = None;
         item.summary.country_code = None;
         item.summary.exit_ip = None;
     }
-    let snapshot = |store: &Store| NodeSnapshot {
-        nodes: store.nodes.iter().map(|r| r.summary.clone()).collect(),
-        selected_id: store.selected_id.clone(),
-        runtime: ProxyRuntime {
-            running: Some(true),
-            version: Some(mihomo::VERSION.into()),
-        },
-    };
-    progress(snapshot(&store));
-    for start in (0..store.nodes.len()).step_by(4) {
-        let end = (start + 4).min(store.nodes.len());
-        let items = &mut store.nodes[start..end];
-        std::thread::scope(|scope| {
-            for (offset, item) in items.iter_mut().enumerate() {
-                let engine = &engine;
-                scope.spawn(move || {
-                    let index = start + offset;
-                    item.summary.latency = None;
-                    item.summary.exit_ip = None;
-                    item.summary.region = None;
-                    item.summary.country_code = None;
-                    let result = engine.node(index).and_then(|node| {
-                        let name = node["name"].as_str().ok_or("节点名称无效")?;
-                        let delay = engine.delay(index, name)?;
-                        let (_, ip, country) = test_proxy(&GeneralProxy {
-                            protocol: "http".into(),
-                            server: "127.0.0.1".into(),
-                            port: engine.ports[index],
-                            username: String::new(),
-                            password: String::new(),
-                        })?;
-                        Ok((delay, ip, country))
-                    });
-                    match result {
-                        Ok((latency, ip, country)) => {
-                            item.summary.latency = Some(latency);
-                            item.summary.exit_ip = Some(ip);
-                            item.summary.country_code = country.clone();
-                            item.summary.region = country.map(|code| match code.as_str() {
-                                "sg" => "新加坡".into(),
-                                "hk" => "香港".into(),
-                                "us" => "美国".into(),
-                                "jp" => "日本".into(),
-                                "tw" => "台湾".into(),
-                                "de" => "德国".into(),
-                                "gb" => "英国".into(),
-                                _ => code.to_uppercase(),
-                            });
-                            item.summary.status = "connected".into();
-                        }
-                        Err(_) => item.summary.status = "failed".into(),
-                    }
-                });
+    let publish = |summaries: &[NodeSummary]| -> Result<(), String> {
+        let snapshot = {
+            let _guard = store_lock()?;
+            let mut latest = load()?;
+            for summary in summaries {
+                if let Some(current) = latest.nodes.iter_mut().find(|n| n.summary.id == summary.id)
+                {
+                    current.summary = summary.clone();
+                }
             }
-        });
-        save(&store)?;
-        progress(snapshot(&store));
-    }
-    save(&store)
+            save(&latest)?;
+            NodeSnapshot {
+                nodes: latest.nodes.into_iter().map(|n| n.summary).collect(),
+                selected_id: latest.selected_id,
+                runtime: ProxyRuntime {
+                    running: Some(true),
+                    version: Some(mihomo::VERSION.into()),
+                },
+            }
+        };
+        progress(snapshot);
+        Ok(())
+    };
+    publish(
+        &store
+            .nodes
+            .iter()
+            .map(|n| n.summary.clone())
+            .collect::<Vec<_>>(),
+    )?;
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::scope(|scope| -> Result<(), String> {
+        for _ in 0..8.min(store.nodes.len()) {
+            let sender = sender.clone();
+            let next = &next;
+            let nodes = &store.nodes;
+            let engine = &engine;
+            scope.spawn(move || loop {
+                let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(item) = nodes.get(index) else {
+                    break;
+                };
+                let mut summary = item.summary.clone();
+                summary.status = "testing".into();
+                if sender.send(summary.clone()).is_err() {
+                    break;
+                }
+                // 即使延迟检测接口被阻止，也要继续检测出口地址。
+                let delay = engine.node(index).and_then(|node| {
+                    engine.delay(index, node["name"].as_str().ok_or("节点名称无效")?)
+                });
+                let result = test_proxy(&GeneralProxy {
+                    protocol: "http".into(),
+                    server: "127.0.0.1".into(),
+                    port: engine.ports[index],
+                    username: String::new(),
+                    password: String::new(),
+                });
+                match result {
+                    Ok((latency, ip, country)) => {
+                        summary.latency = Some(delay.unwrap_or(latency));
+                        summary.exit_ip = Some(ip);
+                        summary.country_code = country.clone();
+                        summary.region = country.map(|code| match code.as_str() {
+                            "sg" => "新加坡".into(),
+                            "hk" => "香港".into(),
+                            "us" => "美国".into(),
+                            "jp" => "日本".into(),
+                            "tw" => "台湾".into(),
+                            "de" => "德国".into(),
+                            "gb" => "英国".into(),
+                            _ => code.to_uppercase(),
+                        });
+                        summary.status = "connected".into();
+                    }
+                    Err(error) => {
+                        summary.latency = delay.ok();
+                        summary.status = if summary.latency.is_some() {
+                            "connected"
+                        } else {
+                            "failed"
+                        }
+                        .into();
+                        summary.error = Some(error);
+                    }
+                }
+                if sender.send(summary).is_err() {
+                    break;
+                }
+            });
+        }
+        drop(sender);
+        for summary in receiver {
+            publish(&[summary])?;
+        }
+        Ok(())
+    })?;
+    drop(engine);
+    drop(session);
+    progress(read()?);
+    Ok(())
 }
+pub(crate) fn verify_runtime_exit(expected: &NodeSummary) -> Result<(), String> {
+    let config = {
+        let _guard = store_lock()?;
+        let store = load()?;
+        let record = store
+            .nodes
+            .iter()
+            .find(|n| {
+                Some(&n.summary.id) == store.selected_id.as_ref() && n.summary.id == expected.id
+            })
+            .ok_or("所选节点已变化")?;
+        native_config(record)
+    };
+    let engine = mihomo::Engine::start(&[config])?;
+    let (_, ip, country) = test_proxy(&GeneralProxy {
+        protocol: "http".into(),
+        server: "127.0.0.1".into(),
+        port: engine.ports[0],
+        username: String::new(),
+        password: String::new(),
+    })?;
+    if Some(&ip) != expected.exit_ip.as_ref() || country != expected.country_code {
+        return Err("实际出口与当前节点目标不一致，请返回节点页重新测速".into());
+    }
+    with_selected(expected, || Ok(()))
+}
+
 fn test_proxy(proxy: &GeneralProxy) -> Result<(u32, String, Option<String>), String> {
     validate_proxy(proxy)?;
     let protocol = if proxy.protocol == "socks5" {
@@ -491,39 +643,169 @@ fn test_proxy(proxy: &GeneralProxy) -> Result<(u32, String, Option<String>), Str
     let client = reqwest::blocking::Client::builder()
         .no_proxy()
         .proxy(proxy)
-        .timeout(Duration::from_secs(10))
+        .connect_timeout(Duration::from_secs(4))
+        .timeout(Duration::from_secs(6))
         .build()
         .map_err(|_| "测试请求失败")?;
-    let started = std::time::Instant::now();
-    let response = client
-        .get("https://www.cloudflare.com/cdn-cgi/trace")
-        .send()
-        .and_then(|r| r.error_for_status())
-        .map_err(|_| "连接测试失败")?;
-    let mut text = String::new();
-    response
-        .take(16384)
-        .read_to_string(&mut text)
-        .map_err(|_| "出口结果无法读取")?;
-    let ip = text
-        .lines()
-        .find_map(|line| line.strip_prefix("ip="))
-        .filter(|ip| ip.parse::<std::net::IpAddr>().is_ok())
-        .ok_or("未取得出口 IP")?;
-    let country = text
-        .lines()
-        .find_map(|line| line.strip_prefix("loc="))
-        .filter(|code| code.len() == 2 && code.bytes().all(|b| b.is_ascii_uppercase()))
-        .map(str::to_lowercase);
-    Ok((
-        started.elapsed().as_millis().min(u32::MAX as u128) as u32,
-        ip.into(),
-        country,
-    ))
+    detect_exit(
+        &client,
+        &[
+            "https://www.cloudflare.com/cdn-cgi/trace",
+            "https://speed.cloudflare.com/cdn-cgi/trace",
+        ],
+    )
 }
+fn detect_exit(
+    client: &reqwest::blocking::Client,
+    endpoints: &[&str],
+) -> Result<(u32, String, Option<String>), String> {
+    let mut error = "出口检测失败".to_owned();
+    for endpoint in endpoints {
+        let started = std::time::Instant::now();
+        let result = (|| {
+            let response = client
+                .get(*endpoint)
+                .send()
+                .and_then(|r| r.error_for_status())
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        "出口检测超时，请检查节点连通性".to_owned()
+                    } else if let Some(status) = e.status() {
+                        format!("出口检测服务返回 HTTP {}", status.as_u16())
+                    } else {
+                        "出口连接失败，请检查节点服务器或 TLS 连接".to_owned()
+                    }
+                })?;
+            let mut text = String::new();
+            response
+                .take(16384)
+                .read_to_string(&mut text)
+                .map_err(|_| "出口结果无法读取".to_owned())?;
+            let ip = text
+                .lines()
+                .find_map(|line| line.strip_prefix("ip="))
+                .filter(|ip| ip.parse::<std::net::IpAddr>().is_ok())
+                .ok_or("未取得出口 IP")?;
+            let country = text
+                .lines()
+                .find_map(|line| line.strip_prefix("loc="))
+                .filter(|code| code.len() == 2 && code.bytes().all(|b| b.is_ascii_uppercase()))
+                .map(str::to_lowercase);
+            Ok((
+                started.elapsed().as_millis().min(u32::MAX as u128) as u32,
+                ip.into(),
+                country,
+            ))
+        })();
+        match result {
+            Ok(exit) => return Ok(exit),
+            Err(reason) => error = reason,
+        }
+    }
+    Err(error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "requires explicitly supplied node URI; does not modify installed nodes"]
+    fn supplied_node_probe() {
+        let uri = std::env::var("CODESEAM_PROBE_URI").expect("node URI required");
+        let record = parse_link(&uri).unwrap();
+        let engine = mihomo::Engine::start(&[native_config(&record)]).unwrap();
+        let parsed = engine.node(0).unwrap();
+        let node: serde_json::Value = serde_json::from_str(&identity(&record)).unwrap();
+        println!(
+            "parsed protocol={}, cipher={}, server={}, port={}",
+            node["type"], node["cipher"], node["server"], node["port"]
+        );
+        let endpoint: std::net::SocketAddr = format!(
+            "{}:{}",
+            node["server"].as_str().unwrap(),
+            node["port"].as_u64().unwrap()
+        )
+        .parse()
+        .unwrap();
+        let started = std::time::Instant::now();
+        let tcp = std::net::TcpStream::connect_timeout(&endpoint, Duration::from_secs(5));
+        println!(
+            "TCP result={:?}, elapsed={}ms",
+            tcp.as_ref().map(|_| ()).map_err(|e| e.kind()),
+            started.elapsed().as_millis()
+        );
+        let delay = engine.delay(0, parsed["name"].as_str().unwrap());
+        let exit = test_proxy(&GeneralProxy {
+            protocol: "http".into(),
+            server: "127.0.0.1".into(),
+            port: engine.ports[0],
+            username: String::new(),
+            password: String::new(),
+        });
+        println!(
+            "delay={delay:?}; exit={:?}",
+            exit.map(|(ms, _, country)| (ms, country))
+        );
+    }
+    #[test]
+    #[ignore = "read-only probe of explicitly authorized installed nodes"]
+    fn installed_nodes_probe() {
+        let _lock = crate::infrastructure::TEST_HOME_LOCK.lock().unwrap();
+        let store = load().unwrap();
+        let configs = store.nodes.iter().map(native_config).collect::<Vec<_>>();
+        let engine = mihomo::Engine::start(&configs).unwrap();
+        std::thread::scope(|scope| {
+            for i in (0..store.nodes.len()).step_by(12) {
+                let engine = &engine;
+                scope.spawn(move || {
+                    let node = engine.node(i).unwrap();
+                    let delay = engine.delay(i, node["name"].as_str().unwrap());
+                    let exit = test_proxy(&GeneralProxy {
+                        protocol: "http".into(),
+                        server: "127.0.0.1".into(),
+                        port: engine.ports[i],
+                        username: String::new(),
+                        password: String::new(),
+                    });
+                    println!(
+                        "node {i}: delay={delay:?}, exit={:?}",
+                        exit.map(|(_, _, country)| country)
+                    );
+                });
+            }
+        });
+    }
+    #[test]
+    fn exit_detection_falls_back_and_rejects_invalid_ip() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let worker = std::thread::spawn(move || {
+            for body in ["ip=not-an-ip\nloc=JP\n", "ip=203.0.113.7\nloc=JP\n"] {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0; 4096];
+                stream.read(&mut request).unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                )
+                .unwrap();
+            }
+        });
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .unwrap();
+        let first = format!("http://{address}/first");
+        let second = format!("http://{address}/second");
+        let (_, ip, country) = detect_exit(&client, &[&first, &second]).unwrap();
+        assert_eq!(ip, "203.0.113.7");
+        assert_eq!(country.as_deref(), Some("jp"));
+        worker.join().unwrap();
+    }
     #[cfg(windows)]
     #[test]
     fn encrypted_store_preserves_selection_and_never_returns_credentials() {
@@ -551,6 +833,9 @@ mod tests {
             let encrypted =
                 std::fs::read(vault::dir().unwrap().join("proxy-nodes-v1.dpapi")).unwrap();
             assert!(!encrypted.windows(14).any(|w| w == b"fixture-secret"));
+            clear().unwrap();
+            assert!(read().unwrap().nodes.is_empty());
+            assert!(read().unwrap().selected_id.is_none());
             remove(id).unwrap();
             assert!(read().unwrap().selected_id.is_none());
             assert!(!has_nodes().unwrap());
@@ -623,8 +908,12 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let worker = std::thread::spawn(move || {
-            let body =
-                STANDARD.encode("trojan://first@127.0.0.1:9#one\ntrojan://second@127.0.0.1:9#two");
+            let body = STANDARD.encode(
+                (0..10)
+                    .map(|i| format!("trojan://fixture-{i}@127.0.0.1:9#node-{i}"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
             for _ in 0..4 {
                 let (mut stream, _) = listener.accept().unwrap();
                 let mut request = [0; 4096];
@@ -647,19 +936,48 @@ mod tests {
         });
         let result = std::panic::catch_unwind(|| {
             let first = import_links(format!("http://{address}/subscription")).unwrap();
-            assert_eq!(first.added, 2);
+            assert_eq!(first.added, 10);
             let retry = import_links(format!("http://{address}/subscription")).unwrap();
-            assert_eq!((retry.added, retry.duplicates), (0, 2));
-            assert_eq!(read().unwrap().nodes.len(), 2);
+            assert_eq!((retry.added, retry.duplicates), (0, 10));
+            assert_eq!(read().unwrap().nodes.len(), 10);
             let updates = std::cell::RefCell::new(Vec::new());
-            test_with_progress(|snapshot| updates.borrow_mut().push(snapshot)).unwrap();
+            test_with_progress(|snapshot| {
+                if updates.borrow().is_empty() {
+                    select(snapshot.nodes[1].id.clone()).unwrap();
+                }
+                updates.borrow_mut().push(snapshot);
+            })
+            .unwrap();
+            let current = read().unwrap();
+            assert_eq!(current.selected_id.as_ref(), Some(&current.nodes[1].id));
             let updates = updates.into_inner();
+            assert_eq!(updates.len(), 22); // 包含排队、十次开始、十次结果和停止事件。
+            assert!(updates.iter().all(|s| s
+                .nodes
+                .iter()
+                .filter(|n| n.status == "testing")
+                .count()
+                <= 8));
+            assert!(updates
+                .iter()
+                .any(|s| s.nodes.iter().any(|n| n.status == "queued")
+                    && s.nodes.iter().any(|n| n.status == "testing")));
+            assert!(updates
+                .iter()
+                .any(|s| s.nodes.iter().any(|n| n.status == "testing")));
+            assert!(updates.iter().any(|s| s
+                .nodes
+                .iter()
+                .filter(|n| n.status == "failed")
+                .count()
+                == 1));
+            assert_eq!(updates.last().unwrap().runtime.running, Some(false));
             assert!(updates
                 .first()
                 .unwrap()
                 .nodes
                 .iter()
-                .all(|n| n.status == "testing"));
+                .all(|n| n.status == "queued"));
             assert!(updates
                 .last()
                 .unwrap()

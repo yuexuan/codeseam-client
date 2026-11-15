@@ -10,15 +10,11 @@ use std::time::Instant;
 use tauri::Emitter;
 
 async fn run<T: Send + 'static>(
-    state: tauri::State<'_, Operations>,
+    _state: tauri::State<'_, Operations>,
     operation: &'static str,
     action: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, AppError> {
     let started = Instant::now();
-    let _guard = state
-        .0
-        .try_lock()
-        .map_err(|_| AppError::new(operation, "已有操作正在执行，请稍后重试".into()))?;
     let result = tokio::task::spawn_blocking(action)
         .await
         .map_err(|_| "节点操作未完成".to_string())
@@ -61,11 +57,26 @@ pub async fn remove_node(state: tauri::State<'_, Operations>, id: String) -> Res
 pub async fn test_nodes(
     state: tauri::State<'_, Operations>,
     app: tauri::AppHandle,
+    ids: Vec<String>,
 ) -> Result<(), AppError> {
-    run(state, "test_nodes", move || {
-        nodes::test_with_progress(|snapshot| {
+    let _guard = state
+        .1
+        .try_lock()
+        .map_err(|_| AppError::new("test_nodes", "节点测速正在执行".into()))?;
+    run(state.clone(), "test_nodes", move || {
+        nodes::test_ordered_with_progress(ids, |snapshot| {
             let _ = app.emit("nodes-progress", snapshot);
         })
     })
     .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn clear_nodes(state: tauri::State<'_, Operations>) -> Result<(), AppError> {
+    let _guard = state
+        .1
+        .try_lock()
+        .map_err(|_| AppError::new("clear_nodes", "请等待测速完成后清空".into()))?;
+    run(state.clone(), "clear_nodes", nodes::clear).await
 }

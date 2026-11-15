@@ -49,7 +49,9 @@
   --font-base: 1.05rem;
   --font-lg: 1.2rem;
   --font-xl: 1.5rem;
-  --font-title: 1.9rem;
+  --font-title: 2.25rem;
+  --font-heading: 1.55rem;
+  --font-subtitle: 1.15rem;
   --title-tracking: -0.03em;
   --radius-sm: 10px;
   --radius-md: 12px;

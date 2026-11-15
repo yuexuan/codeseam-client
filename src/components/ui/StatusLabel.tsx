@@ -13,7 +13,13 @@ const labels: Record<Status, string> = {
   optional: '可选',
   unsupported: '不支持',
 };
-export function StatusLabel({ status }: { status: Status | 'scanning' }) {
+export function StatusLabel({
+  status,
+  label,
+}: {
+  status: Status | 'scanning';
+  label?: string;
+}) {
   const Icon =
     status === 'satisfied'
       ? CircleCheck
@@ -25,7 +31,9 @@ export function StatusLabel({ status }: { status: Status | 'scanning' }) {
   return (
     <span className={`${styles.status} ${styles[status]}`}>
       <Icon size={18} aria-hidden="true" />
-      <span>{status === 'scanning' ? '检测中' : labels[status]}</span>
+      <span>
+        {status === 'scanning' ? '检测中' : (label ?? labels[status])}
+      </span>
     </span>
   );
 }

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { StatusLabel } from '../../components/ui/StatusLabel';
+import { Radio } from '../../components/ui/Radio';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  CircleCheck,
-  CircleHelp,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
   Download,
   Gauge,
   Layers,
@@ -14,10 +16,20 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
+import type { NodeSummary } from '../../bindings/commands';
 import type { NodesService, ProxyProtocol } from '../../services/nodes';
 import { Button } from '../../components/ui/Button';
 import { Surface } from '../../components/ui/Surface';
 import styles from './NodesPage.module.css';
+
+function sortNodes(nodes: NodeSummary[], sort: 'default' | 'asc' | 'desc') {
+  if (sort === 'default') return [...nodes];
+  return [...nodes].sort((a, b) => {
+    if (a.latency === null) return b.latency === null ? 0 : 1;
+    if (b.latency === null) return -1;
+    return sort === 'asc' ? a.latency - b.latency : b.latency - a.latency;
+  });
+}
 
 export function NodesPage({ service }: { service: NodesService }) {
   const client = useQueryClient();
@@ -49,6 +61,10 @@ export function NodesPage({ service }: { service: NodesService }) {
   const [password, setPassword] = useState('');
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [sort, setSort] = useState<'default' | 'asc' | 'desc'>('default');
+  const [testOrder, setTestOrder] = useState<string[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const rows = useRef(new Map<string, HTMLDivElement>());
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (removeId) dialog.current?.showModal();
@@ -80,6 +96,7 @@ export function NodesPage({ service }: { service: NodesService }) {
         `新增 ${result.added} 个节点，跳过 ${result.duplicates} 个重复节点`,
       );
       await update();
+      if (result.added > 0) startTesting((await service.read()).nodes);
     },
   });
   const selection = useMutation({
@@ -87,23 +104,67 @@ export function NodesPage({ service }: { service: NodesService }) {
     onSuccess: update,
   });
   const removal = useMutation({
-    mutationFn: (id: string) => service.remove(id),
+    mutationFn: (id: string) =>
+      id === '*all*' ? service.clear() : service.remove(id),
     onSuccess: async () => {
       setRemoveId(null);
       await update();
     },
   });
   const testing = useMutation({
-    mutationFn: () => service.test(),
+    mutationFn: (ids: string[]) => service.test(ids),
     onSuccess: update,
     onError: update,
   });
+  const editing =
+    importing.isPending || selection.isPending || removal.isPending;
   const busy =
     importing.isPending ||
     selection.isPending ||
     removal.isPending ||
     testing.isPending;
   const data = state.data;
+  const sortedNodes = useMemo(() => {
+    const nodes = [...(data?.nodes ?? [])];
+    if (testing.isPending) {
+      const ranks = new Map(testOrder.map((id, index) => [id, index]));
+      return nodes.sort(
+        (a, b) => (ranks.get(a.id) ?? Infinity) - (ranks.get(b.id) ?? Infinity),
+      );
+    }
+    return sortNodes(nodes, sort);
+  }, [data?.nodes, sort, testing.isPending, testOrder]);
+  function startTesting(nodes: NodeSummary[]) {
+    const ids = sortNodes(nodes, sort).map((node) => node.id);
+    setTestOrder(ids);
+    testing.mutate(ids);
+  }
+  const activeId = sortedNodes.find((node) => node.status === 'testing')?.id;
+  useEffect(() => {
+    if (!testing.isPending || !activeId) return;
+    const row = rows.current.get(activeId);
+    const list = listRef.current;
+    if (!row || !list) return;
+    const bounds = row.getBoundingClientRect();
+    const viewport = list.getBoundingClientRect();
+    if (bounds.top < viewport.top || bounds.bottom > viewport.bottom) {
+      list.scrollTop += bounds.top - viewport.top;
+    }
+  }, [activeId, testing.isPending]);
+  const statusText = (node: NodeSummary | undefined) =>
+    node?.status === 'testing'
+      ? '测试中'
+      : node?.status === 'failed'
+        ? '超时'
+        : '待测试';
+  const latencyClass = (node: NodeSummary | undefined) =>
+    node?.latency != null
+      ? node.latency < 300
+        ? styles.good
+        : styles.slow
+      : node?.status === 'failed'
+        ? styles.failed
+        : styles.latency;
   const selected = data?.nodes.find((node) => node.id === data.selectedId);
   const error =
     importing.error ??
@@ -112,14 +173,14 @@ export function NodesPage({ service }: { service: NodesService }) {
     testing.error ??
     state.error;
   const clearMessage = () => {
-    importing.reset();
-    selection.reset();
-    removal.reset();
-    testing.reset();
+    if (!importing.isPending) importing.reset();
+    if (!selection.isPending) selection.reset();
+    if (!removal.isPending) removal.reset();
+    if (!testing.isPending) testing.reset();
     setNotice('');
   };
   return (
-    <>
+    <div className={styles.page}>
       <div className={styles.header}>
         <h1>节点与代理</h1>
         <p>添加代理节点，选择当前使用的节点。</p>
@@ -271,7 +332,7 @@ export function NodesPage({ service }: { service: NodesService }) {
           >
             {error?.message ??
               (testing.isPending
-                ? `正在检测 · 已完成 ${data?.nodes.filter((node) => node.status !== 'testing').length ?? 0} / ${data?.nodes.length ?? 0}`
+                ? `正在检测 · 已完成 ${data?.nodes.filter((node) => ['connected', 'failed'].includes(node.status)).length ?? 0} / ${data?.nodes.length ?? 0}`
                 : notice)}
           </p>
           <div className={styles.listHeader}>
@@ -279,40 +340,79 @@ export function NodesPage({ service }: { service: NodesService }) {
               <List aria-hidden="true" />
               已添加节点 · {data?.nodes.length ?? 0}
             </h2>
-            <Button
-              className={styles.testButton}
-              disabled={busy || !data?.nodes.length}
-              onClick={() => {
-                clearMessage();
-                testing.mutate();
-              }}
-              aria-label="测速"
-            >
-              {testing.isPending ? (
-                <LoaderCircle size={21} />
-              ) : (
-                <Gauge size={21} />
-              )}
-              {tab === 'clash' && (testing.isPending ? '测速中' : '测速')}
-            </Button>
+            <div className={styles.listActions}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                disabled={testing.isPending || !data?.nodes.length}
+                aria-label={`排序：${sort === 'default' ? '导入顺序' : sort === 'asc' ? '延迟从低到高' : '延迟从高到低'}`}
+                title={`当前${sort === 'default' ? '导入顺序，切换为延迟升序' : sort === 'asc' ? '延迟升序，切换为降序' : '延迟降序，切换为导入顺序'}`}
+                onClick={() =>
+                  setSort(
+                    sort === 'default'
+                      ? 'asc'
+                      : sort === 'asc'
+                        ? 'desc'
+                        : 'default',
+                  )
+                }
+              >
+                {sort === 'desc' ? (
+                  <ArrowUpNarrowWide size={21} />
+                ) : (
+                  <ArrowDownWideNarrow size={21} />
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.iconButton}
+                disabled={busy || !data?.nodes.length}
+                aria-label="清空所有节点"
+                title="清空所有节点"
+                onClick={() => setRemoveId('*all*')}
+              >
+                <Trash2 size={21} />
+              </button>
+              <Button
+                className={styles.testButton}
+                disabled={busy || !data?.nodes.length}
+                onClick={() => {
+                  clearMessage();
+                  startTesting(data?.nodes ?? []);
+                }}
+                aria-label="测速"
+              >
+                {testing.isPending ? (
+                  <LoaderCircle size={21} />
+                ) : (
+                  <Gauge size={21} />
+                )}
+                {tab === 'clash' && (testing.isPending ? '测速中' : '测速')}
+              </Button>
+            </div>
           </div>
           <div
+            ref={listRef}
             className={styles.nodeList}
             role="radiogroup"
             aria-label="当前使用的节点"
             tabIndex={0}
           >
-            {data?.nodes.map((node) => (
+            {sortedNodes.map((node) => (
               <div
-                className={`${styles.nodeRow} ${data.selectedId === node.id ? styles.selected : ''}`}
+                className={`${styles.nodeRow} ${data?.selectedId === node.id ? styles.selected : ''}`}
                 key={node.id}
+                ref={(element) => {
+                  if (element) rows.current.set(node.id, element);
+                  else rows.current.delete(node.id);
+                }}
+                data-status={node.status}
               >
                 <label className={styles.nodeChoice}>
-                  <input
-                    type="radio"
+                  <Radio
                     name="selected-node"
-                    checked={data.selectedId === node.id}
-                    disabled={busy}
+                    checked={data?.selectedId === node.id}
+                    disabled={editing}
                     onChange={() => {
                       clearMessage();
                       selection.mutate(node.id);
@@ -332,23 +432,24 @@ export function NodesPage({ service }: { service: NodesService }) {
                       )}
                     {node.name}
                   </span>
-                  <span className={styles.region}>
-                    {node.region ?? '地区待检测'}
+                  <span
+                    className={`${styles.region} ${node.status === 'failed' ? styles.failed : ''}`}
+                    title={node.error ?? '通过出口 IP 检测的地区'}
+                  >
+                    {node.region ??
+                      (node.status === 'failed'
+                        ? '超时'
+                        : node.error
+                          ? '未知'
+                          : statusText(node))}
                   </span>
                   <span
-                    className={
-                      node.latency !== null && node.latency < 150
-                        ? styles.good
-                        : styles.latency
-                    }
+                    className={latencyClass(node)}
+                    title={node.error ?? undefined}
                   >
-                    {testing.isPending && node.status === 'testing'
-                      ? '检测中'
-                      : node.latency !== null
-                        ? `${node.latency} ms`
-                        : node.status === 'failed'
-                          ? '连接失败'
-                          : '待检测'}
+                    {node.latency !== null
+                      ? `${node.latency} ms`
+                      : statusText(node)}
                   </span>
                 </label>
                 <button
@@ -378,21 +479,23 @@ export function NodesPage({ service }: { service: NodesService }) {
             <dl>
               <div>
                 <dt>运行状态</dt>
-                <dd
-                  className={
-                    data?.runtime.running ? styles.good : styles.latency
-                  }
-                >
-                  {data?.runtime.running ? (
-                    <CircleCheck size={24} />
-                  ) : (
-                    <CircleHelp size={24} />
-                  )}
-                  {data?.runtime.running
-                    ? '运行正常'
-                    : data?.runtime.running === false
-                      ? '按需启动'
-                      : '无法确认'}
+                <dd>
+                  <StatusLabel
+                    status={
+                      data?.runtime.running
+                        ? 'satisfied'
+                        : data?.runtime.running === false
+                          ? 'optional'
+                          : 'unknown'
+                    }
+                    label={
+                      data?.runtime.running
+                        ? '运行正常'
+                        : data?.runtime.running === false
+                          ? '按需启动'
+                          : '无法确认'
+                    }
+                  />
                 </dd>
               </div>
               <div>
@@ -411,16 +514,16 @@ export function NodesPage({ service }: { service: NodesService }) {
                 className={
                   selected?.status === 'connected'
                     ? styles.connected
-                    : styles.latency
+                    : latencyClass(selected)
                 }
               >
-                {testing.isPending && selected?.status === 'testing'
-                  ? '检测中'
+                {selected?.status === 'testing'
+                  ? '测试中'
                   : selected?.status === 'connected'
                     ? '连接正常'
                     : selected?.status === 'failed'
-                      ? '连接失败'
-                      : '待检测'}
+                      ? '超时'
+                      : '待测试'}
               </span>
             </div>
             <dl>
@@ -434,29 +537,40 @@ export function NodesPage({ service }: { service: NodesService }) {
               </div>
               <div>
                 <dt>地区</dt>
-                <dd>{selected?.region ?? '待检测'}</dd>
+                <dd title={selected?.error ?? undefined}>
+                  {selected?.region ??
+                    (selected?.status === 'failed'
+                      ? '超时'
+                      : selected?.error
+                        ? '未知'
+                        : statusText(selected))}
+                </dd>
               </div>
               <div>
                 <dt>延迟</dt>
-                <dd
-                  className={
-                    selected?.latency !== null &&
-                    selected?.latency !== undefined &&
-                    selected.latency < 150
-                      ? styles.good
-                      : ''
-                  }
-                >
+                <dd className={latencyClass(selected)}>
                   {selected?.latency !== null && selected?.latency !== undefined
                     ? `${selected.latency} ms`
-                    : '待检测'}
+                    : statusText(selected)}
                 </dd>
               </div>
               <div>
                 <dt>出口 IP</dt>
-                <dd>{selected?.exitIp ?? '待检测'}</dd>
+                <dd title={selected?.error ?? undefined}>
+                  {selected?.exitIp ??
+                    (selected?.status === 'failed'
+                      ? '超时'
+                      : selected?.error
+                        ? '未知'
+                        : statusText(selected))}
+                </dd>
               </div>
             </dl>
+            {selected?.error && (
+              <p role="status" className={styles.error}>
+                {selected.error}
+              </p>
+            )}
           </Surface>
         </div>
       </div>
@@ -479,8 +593,14 @@ export function NodesPage({ service }: { service: NodesService }) {
           >
             <X size={20} />
           </button>
-          <h2 id="remove-title">删除节点？</h2>
-          <p>{data?.nodes.find((node) => node.id === removeId)?.name}</p>
+          <h2 id="remove-title">
+            {removeId === '*all*' ? '清空所有节点？' : '删除节点？'}
+          </h2>
+          <p>
+            {removeId === '*all*'
+              ? `将删除全部 ${data?.nodes.length ?? 0} 个节点及当前选择，此操作无法撤销。`
+              : data?.nodes.find((node) => node.id === removeId)?.name}
+          </p>
           <div>
             <Button
               autoFocus
@@ -497,11 +617,11 @@ export function NodesPage({ service }: { service: NodesService }) {
                 removal.mutate(removeId);
               }}
             >
-              删除
+              {removeId === '*all*' ? '清空' : '删除'}
             </Button>
           </div>
         </dialog>
       )}
-    </>
+    </div>
   );
 }

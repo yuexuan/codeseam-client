@@ -1,3 +1,4 @@
+import { WizardFooterContext } from './WizardActions';
 import { useState, type ReactNode } from 'react';
 import { Check, Minus, Square, X } from 'lucide-react';
 import type { WindowControls } from '../../core/platform/window';
@@ -6,8 +7,8 @@ import styles from './WindowShell.module.css';
 const steps = [
   '环境预检',
   '节点与代理',
-  'Claude 应用',
   '运行环境',
+  'Claude 应用',
   '浏览器',
   '确认完成',
 ];
@@ -17,19 +18,26 @@ export function WindowShell({
   window,
   preview,
   step = 0,
+  virtualRuntime = false,
 }: {
   children: ReactNode;
   footer: ReactNode;
   window: WindowControls;
   preview: boolean;
   step?: number;
+  virtualRuntime?: boolean;
 }) {
   const [error, setError] = useState('');
+  const visibleSteps = steps;
+  const visibleStep = step;
+  const [footerHost, setFooterHost] = useState<HTMLElement | null>(null);
   const act = (action: () => Promise<void>) => {
     void action().catch((e: Error) => setError(e.message));
   };
   return (
-    <div className={`${styles.shell} ${step === 1 ? styles.nodesShell : ''}`}>
+    <div
+      className={`${styles.shell} ${step === 1 || step === 2 || step === 3 ? styles.nodesShell : ''} ${virtualRuntime ? styles.virtualShell : ''}`}
+    >
       <header className={styles.titlebar} data-tauri-drag-region>
         <img src={logo} alt="CodeSeam" draggable={false} />
         <div className={styles.controls}>
@@ -53,12 +61,15 @@ export function WindowShell({
       </header>
       <nav aria-label="初始化步骤" className={styles.steps}>
         <ol>
-          {steps.map((label, index) => (
-            <li key={label} aria-current={index === step ? 'step' : undefined}>
+          {visibleSteps.map((label, index) => (
+            <li
+              key={label}
+              aria-current={index === visibleStep ? 'step' : undefined}
+            >
               <span
-                className={`${styles.number} ${index < step ? styles.done : ''}`}
+                className={`${styles.number} ${index < visibleStep ? styles.done : ''}`}
               >
-                {index < step ? (
+                {index < visibleStep ? (
                   <Check size={21} aria-label="已完成" />
                 ) : (
                   index + 1
@@ -69,16 +80,22 @@ export function WindowShell({
           ))}
         </ol>
       </nav>
-      <main className={styles.content}>
+      <main
+        className={`${styles.content} ${step === 1 ? styles.nodesContent : ''}`}
+      >
         {preview && <p className={styles.preview}>开发预览 · 数据为演示场景</p>}
         {error && (
           <p role="alert" className={styles.error}>
             {error}
           </p>
         )}
-        {children}
+        <WizardFooterContext.Provider value={footerHost}>
+          {children}
+        </WizardFooterContext.Provider>
       </main>
-      <footer className={styles.footer}>{footer}</footer>
+      <footer ref={setFooterHost} className={styles.footer}>
+        {footer}
+      </footer>
     </div>
   );
 }

@@ -1,0 +1,309 @@
+:where(.panel p) > svg {
+  vertical-align: middle;
+  width: 1.3rem;
+  margin-right: 0.5rem;
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  gap: 1.2rem;
+}
+.header {
+  padding: 0 1rem;
+}
+.header h1 {
+  font-size: var(--font-title);
+  margin: 0 0 0.4rem;
+}
+.header p {
+  font-size: var(--font-subtitle);
+  color: var(--secondary);
+  margin: 0;
+}
+.columns,
+.guestColumns {
+  display: grid;
+  grid-template-columns: 1.06fr 1fr;
+  gap: 1.1rem;
+  flex: 1;
+}
+.guestColumns {
+  grid-template-columns: 1.5fr 1fr;
+}
+.panel {
+  padding: 1.5rem;
+  min-width: 0;
+}
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 1.4rem;
+  font-size: var(--font-heading);
+}
+.panel svg,
+.field > svg {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.field {
+  display: grid;
+  grid-template-columns: 1.3rem 8.4rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  margin: 0.55rem 0;
+}
+.field input,
+.field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  min-width: 0;
+}
+.field small {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--danger);
+  padding-top: 0.25rem;
+}
+.security,
+.note {
+  color: var(--secondary);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-top: 1.5rem;
+}
+.security,
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.footer {
+  flex: 1;
+  margin: 0 1rem;
+  color: var(--secondary);
+  font-size: 0.9rem;
+}
+.footer svg {
+  flex-shrink: 0;
+  width: 1.2rem;
+}
+.resources {
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  margin-bottom: 1.4rem;
+}
+.resources h3 {
+  margin: 0 0 0.5rem;
+}
+.kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--separator);
+}
+.kv strong {
+  text-align: right;
+}
+.resources .kv {
+  border: 0;
+  padding: 0.45rem 0;
+}
+
+.page progress {
+  width: 100%;
+  height: 0.65rem;
+  accent-color: var(--success);
+}
+.prepare {
+  padding: 2rem 3rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+.summary span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  font-weight: 600;
+  border-right: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.summary span:last-child {
+  border: 0;
+}
+.summary svg {
+  color: var(--success);
+}
+.summary small {
+  color: var(--warning);
+  font-size: 0.75rem;
+}
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2.5rem 0 1rem;
+}
+.hero > svg {
+  flex-shrink: 0;
+  width: 7rem;
+  height: 7rem;
+  padding: 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: 1.2rem;
+  color: var(--brand);
+  background: var(--badge-fill);
+}
+.hero h2 {
+  font-size: var(--font-title);
+  margin: 0 0 0.5rem;
+}
+.hero p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: var(--font-subtitle);
+}
+.components {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  padding: 0 2rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  margin: 1rem auto;
+  width: 70%;
+}
+.components p {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.components svg {
+  color: var(--success);
+}
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+.actions button {
+  min-width: 12rem;
+}
+.notice {
+  text-align: center;
+  padding: 1.2rem;
+  color: var(--warning);
+  border: 1px solid var(--line);
+  background: var(--badge-fill);
+  border-radius: 1rem;
+}
+.error {
+  color: var(--danger);
+  margin: 0;
+  padding: 0.7rem;
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.4rem 0 1.5rem;
+}
+.progress progress {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  height: 0.8rem;
+  overflow: hidden;
+  background: var(--separator);
+}
+.progress progress::-webkit-progress-bar {
+  background: var(--separator);
+  border-radius: 999px;
+}
+.progress progress::-webkit-progress-value {
+  background: var(--brand);
+  border-radius: 999px;
+}
+.progress progress::-moz-progress-bar {
+  background: var(--brand);
+  border-radius: 999px;
+}
+.progress strong {
+  white-space: nowrap;
+}
+.task {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(9rem, 1fr) minmax(0, 1.4fr) 4rem;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 3.4rem;
+  border-bottom: 1px solid var(--separator);
+}
+.task :where(span) {
+  font-size: 0.85rem;
+  color: var(--secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spin {
+  animation: spin 1.2s linear infinite;
+}
+.liveStatus {
+  margin: 0 0 0.6rem;
+  min-height: 1.5em;
+  color: var(--secondary);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.failed {
+  color: var(--danger);
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (width <= 1050px) {
+  .columns,
+  .guestColumns {
+    grid-template-columns: 1fr;
+  }
+  .summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hero h2 {
+    font-size: 1.8rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+.summary span:last-child svg {
+  color: var(--brand);
+}

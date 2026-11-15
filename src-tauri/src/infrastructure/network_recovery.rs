@@ -27,7 +27,7 @@ struct Plan {
     change: Change,
     before: Value,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Backup {
     plan: Plan,
@@ -77,8 +77,41 @@ fn profile(name: Option<&str>) -> Result<Value, String> {
 }
 impl Change {
     fn validate(&self) -> Result<(), String> {
-        if !matches!(self.action.as_str(), "disable_ipv6" | "set_dns") {
+        if !matches!(
+            self.action.as_str(),
+            "disable_ipv6" | "set_dns" | "set_timezone" | "enable_time_sync"
+        ) {
             return Err("不支持的系统网络操作".into());
+        }
+        if self.action == "enable_time_sync" {
+            return if self.adapter_ids.is_empty() && self.preset.is_none() && !self.doh {
+                Ok(())
+            } else {
+                Err("时间同步操作不可附带其他参数".into())
+            };
+        }
+        if self.action == "set_timezone" {
+            if !self.adapter_ids.is_empty()
+                || self.doh
+                || !matches!(
+                    self.preset.as_deref(),
+                    Some(
+                        "Singapore Standard Time"
+                            | "China Standard Time"
+                            | "Tokyo Standard Time"
+                            | "UTC"
+                            | "Pacific Standard Time"
+                            | "Mountain Standard Time"
+                            | "Central Standard Time"
+                            | "Eastern Standard Time"
+                            | "GMT Standard Time"
+                            | "W. Europe Standard Time"
+                    )
+                )
+            {
+                return Err("请选择受支持的目标时区".into());
+            }
+            return Ok(());
         }
         if self.adapter_ids.is_empty()
             || self.adapter_ids.len() > 128
@@ -104,6 +137,8 @@ fn backup_file(action: &str) -> Result<&'static str, String> {
     match action {
         "disable_ipv6" => Ok("system-ipv6-backup.dpapi"),
         "set_dns" => Ok("system-dns-backup.dpapi"),
+        "set_timezone" => Ok("system-timezone-backup.dpapi"),
+        "enable_time_sync" => Ok("system-time-sync-backup.dpapi"),
         _ => Err("不支持的备份类型".into()),
     }
 }
@@ -161,6 +196,24 @@ fn validate_plan(plan: &Plan) -> Result<(), String> {
     if !valid_token(&plan.id) {
         return Err("计划标识无效".into());
     }
+    if plan.change.action == "enable_time_sync" {
+        return if plan.before["timeSync"]["running"].is_boolean()
+            && matches!(
+                plan.before["timeSync"]["startMode"].as_str(),
+                Some("Auto" | "Manual" | "Disabled")
+            ) {
+            Ok(())
+        } else {
+            Err("时间服务快照缺失".into())
+        };
+    }
+    if plan.change.action == "set_timezone" {
+        return if plan.before["timezone"].as_str().is_some() {
+            Ok(())
+        } else {
+            Err("时区快照缺失".into())
+        };
+    }
     let adapters = plan.before["adapters"]
         .as_array()
         .ok_or("计划缺少网卡快照")?;
@@ -196,7 +249,7 @@ fn validate_plan(plan: &Plan) -> Result<(), String> {
 fn payload(op: &str, plan: &Plan) -> Result<Value, String> {
     validate_plan(plan)?;
     Ok(
-        json!({"op":op,"action":plan.change.action,"adapterIds":plan.change.adapter_ids,"doh":plan.change.doh,"profile":if plan.change.action=="set_dns"{profile(plan.change.preset.as_deref())?}else{Value::Null},"before":plan.before}),
+        json!({"op":op,"action":plan.change.action,"adapterIds":plan.change.adapter_ids,"doh":plan.change.doh,"profile":if plan.change.action=="set_dns"{profile(plan.change.preset.as_deref())?}else{Value::Null},"before":plan.before,"timezone":plan.change.preset}),
     )
 }
 fn operations_dir() -> Result<std::path::PathBuf, String> {
@@ -230,7 +283,7 @@ pub fn helper(id: &str) -> i32 {
             return Err("请求过大".into());
         }
         let req: HelperRequest = serde_json::from_slice(&bytes).map_err(|_| "提权请求格式无效")?;
-        if req.op != "restore" {
+        if !matches!(req.op.as_str(), "restore" | "apply") {
             return Err("无效提权操作".into());
         }
         let v = powershell(payload(&req.op, &req.plan)?)?;
@@ -328,6 +381,140 @@ fn run_change(op: &str, plan: &Plan) -> Result<Value, String> {
     v
 }
 
+// 为每个受管理的适配器保留首次快照。执行计划使用独立快照记录当前状态，
+// 以便检查并发状态变化并在失败时回滚。
+fn recovery_plan(previous: Option<&Backup>, current: &Plan) -> Result<Plan, String> {
+    let Some(previous) = previous else {
+        return Ok(current.clone());
+    };
+    if previous.phase != "applied" {
+        return Err("上次设置未完成且结果尚未确认，请先检查并恢复异常操作".into());
+    }
+    let mut plan = previous.plan.clone();
+    plan.change.preset = current.change.preset.clone();
+    for id in &current.change.adapter_ids {
+        if !plan.change.adapter_ids.contains(id) {
+            let adapter = current.before["adapters"]
+                .as_array()
+                .and_then(|adapters| adapters.iter().find(|a| a["id"].as_str() == Some(id)))
+                .ok_or("新网卡缺少原始快照")?
+                .clone();
+            plan.before["adapters"]
+                .as_array_mut()
+                .ok_or("原始网卡快照缺失")?
+                .retain(|a| a["id"].as_str() != Some(id));
+            plan.before["adapters"]
+                .as_array_mut()
+                .unwrap()
+                .push(adapter);
+            plan.change.adapter_ids.push(id.clone());
+        }
+    }
+    Ok(plan)
+}
+
+fn save_backup(file: &str, backup: &Backup) -> Result<(), String> {
+    vault::save(
+        file,
+        &serde_json::to_vec(backup).map_err(|e| e.to_string())?,
+    )
+}
+
+fn restore_previous_backup(file: &str, previous: Option<&Backup>) -> Result<(), String> {
+    match previous {
+        Some(backup) => save_backup(file, backup),
+        None => vault::remove(file),
+    }
+}
+
+/// 运行时功能共用固定操作辅助程序和加密恢复日志。
+pub fn apply_runtime(action: &str, target: Option<String>) -> Result<(), String> {
+    let file = backup_file(action)?;
+    let previous = load_backup(action)?;
+    let snapshot = powershell(json!({"op":"read"}))?;
+    if snapshot["ok"] != true {
+        return Err(format!("无法读取系统设置：{}", snapshot["error"]));
+    }
+    let before = snapshot["data"]["state"].clone();
+    let adapters = before["adapters"].as_array().ok_or("缺少网卡快照")?;
+    if action == "disable_ipv6"
+        && previous.as_ref().is_none_or(|b| b.phase == "applied")
+        && before["ipv6RegistryExists"] == true
+        && before["ipv6RegistryValue"] == 255
+        && adapters
+            .iter()
+            .filter(|a| a["status"] != "Not Present")
+            .all(|a| a["ipv6Enabled"] != true)
+    {
+        return Ok(());
+    }
+    let adapter_ids = adapters
+        .iter()
+        .filter(|a| {
+            if action == "disable_ipv6" {
+                a["ipv6Enabled"].is_boolean() && a["status"] != "Not Present"
+            } else if action == "set_dns" {
+                a["dnsAvailable"] == true && a["status"] == "Up"
+            } else {
+                false
+            }
+        })
+        .filter_map(|a| a["id"].as_str().map(str::to_owned))
+        .collect();
+    let plan = Plan {
+        id: token(),
+        created_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_secs(),
+        change: Change {
+            action: action.into(),
+            adapter_ids,
+            preset: target,
+            doh: false,
+        },
+        before,
+    };
+    validate_plan(&plan)?;
+    let recovery = recovery_plan(previous.as_ref(), &plan)?;
+    vault::save(
+        file,
+        &serde_json::to_vec(&Backup {
+            plan: recovery.clone(),
+            phase: "pending".into(),
+            applied_at: plan.created_at,
+        })
+        .map_err(|e| e.to_string())?,
+    )?;
+    let result = match run_change("apply", &plan) {
+        Ok(result) => result,
+        Err(error) => {
+            if error.starts_with("UAC 已取消") {
+                restore_previous_backup(file, previous.as_ref())?;
+            }
+            return Err(error);
+        }
+    };
+    if result["ok"] != true {
+        if result["rolledBack"] == true || result["unchanged"] == true {
+            restore_previous_backup(file, previous.as_ref())?;
+        }
+        return Err(format!(
+            "设置失败：{}；回滚结果：{}；{}",
+            result["error"], result["rolledBack"], result["rollbackError"]
+        ));
+    }
+    vault::save(
+        file,
+        &serde_json::to_vec(&Backup {
+            plan: recovery,
+            phase: "applied".into(),
+            applied_at: plan.created_at,
+        })
+        .map_err(|e| e.to_string())?,
+    )
+}
+
 pub fn restore(action: &str) -> Result<(), String> {
     let backup = load_backup(action)?.ok_or("没有待恢复的系统网络配置")?;
     let result = run_change("restore", &backup.plan)?;
@@ -340,6 +527,137 @@ pub fn restore(action: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn ipv6_plan(ids: &[(&str, bool)]) -> Plan {
+        Plan {
+            id: "a".repeat(32),
+            created_at: 1,
+            change: Change {
+                action: "disable_ipv6".into(),
+                adapter_ids: ids.iter().map(|(id, _)| id.to_string()).collect(),
+                preset: None,
+                doh: false,
+            },
+            before: json!({"ipv6RegistryExists":false,"ipv6RegistryValue":null,
+                "adapters":ids.iter().map(|(id, enabled)| json!({"id":id,"ipv6Enabled":enabled,"status":"Up"})).collect::<Vec<_>>() }),
+        }
+    }
+    #[test]
+    fn repeated_apply_preserves_originals_and_adds_new_adapters() {
+        let old = "51a8d43c-d40d-489b-95cc-b047e784672f";
+        let new = "51a8d43c-d40d-489b-95cc-b047e7846730";
+        let previous = Backup {
+            plan: ipv6_plan(&[(old, true)]),
+            phase: "applied".into(),
+            applied_at: 1,
+        };
+        let mut current = ipv6_plan(&[(old, false), (new, true)]);
+        current.before["ipv6RegistryExists"] = json!(true);
+        current.before["ipv6RegistryValue"] = json!(255);
+        let merged = recovery_plan(Some(&previous), &current).unwrap();
+        assert_eq!(merged.before["adapters"][0]["ipv6Enabled"], true);
+        assert_eq!(merged.before["adapters"][1]["ipv6Enabled"], true);
+        assert_eq!(merged.before["ipv6RegistryExists"], false);
+        assert_eq!(current.before["adapters"][0]["ipv6Enabled"], false);
+        assert!(validate_plan(&merged).is_ok());
+        let again = Backup {
+            plan: merged,
+            ..previous
+        };
+        assert_eq!(
+            recovery_plan(Some(&again), &current)
+                .unwrap()
+                .change
+                .adapter_ids
+                .len(),
+            2
+        );
+    }
+    #[test]
+    fn missing_adapters_remain_in_recovery_and_pending_operations_are_blocked() {
+        let old = "51a8d43c-d40d-489b-95cc-b047e784672f";
+        let mut previous = Backup {
+            plan: ipv6_plan(&[(old, true)]),
+            phase: "applied".into(),
+            applied_at: 1,
+        };
+        assert_eq!(
+            recovery_plan(Some(&previous), &ipv6_plan(&[]))
+                .unwrap()
+                .change
+                .adapter_ids,
+            vec![old]
+        );
+        previous.phase = "pending".into();
+        assert!(recovery_plan(Some(&previous), &ipv6_plan(&[])).is_err());
+    }
+    #[test]
+    fn repeated_timezone_change_keeps_first_value_and_latest_target() {
+        let mut first = ipv6_plan(&[]);
+        first.change.action = "set_timezone".into();
+        first.change.preset = Some("Singapore Standard Time".into());
+        first.before = json!({"timezone":"China Standard Time"});
+        let previous = Backup {
+            plan: first.clone(),
+            phase: "applied".into(),
+            applied_at: 1,
+        };
+        first.before = json!({"timezone":"Singapore Standard Time"});
+        first.change.preset = Some("Tokyo Standard Time".into());
+        let merged = recovery_plan(Some(&previous), &first).unwrap();
+        assert_eq!(merged.before["timezone"], "China Standard Time");
+        assert_eq!(merged.change.preset.as_deref(), Some("Tokyo Standard Time"));
+    }
+    #[test]
+    fn time_sync_operation_accepts_only_its_own_fixed_parameters() {
+        let mut change = Change {
+            action: "enable_time_sync".into(),
+            adapter_ids: vec![],
+            preset: None,
+            doh: false,
+        };
+        assert!(change.validate().is_ok());
+        change.preset = Some("arbitrary".into());
+        assert!(change.validate().is_err());
+        change.preset = None;
+        change.doh = true;
+        assert!(change.validate().is_err());
+    }
+    #[test]
+    fn timezone_targets_and_full_ipv6_scope_are_validated() {
+        let mut plan = Plan {
+            id: "a".repeat(32),
+            created_at: 1,
+            change: Change {
+                action: "set_timezone".into(),
+                adapter_ids: vec![],
+                preset: Some("Singapore Standard Time".into()),
+                doh: false,
+            },
+            before: json!({"timezone":"China Standard Time"}),
+        };
+        assert!(validate_plan(&plan).is_ok());
+        assert_eq!(
+            payload("apply", &plan).unwrap()["timezone"],
+            "Singapore Standard Time"
+        );
+        plan.change.preset = Some("invalid; command".into());
+        assert!(validate_plan(&plan).is_err());
+        plan.change = Change {
+            action: "disable_ipv6".into(),
+            adapter_ids: vec!["51a8d43c-d40d-489b-95cc-b047e784672f".into()],
+            preset: None,
+            doh: false,
+        };
+        plan.before = json!({"adapters":[
+            {"id":"51a8d43c-d40d-489b-95cc-b047e784672f","ipv6Enabled":true,"status":"Up"},
+            {"id":"51a8d43c-d40d-489b-95cc-b047e7846730","ipv6Enabled":true,"status":"Disconnected"}
+        ]});
+        assert!(validate_plan(&plan).is_err());
+        plan.change
+            .adapter_ids
+            .push("51a8d43c-d40d-489b-95cc-b047e7846730".into());
+        assert!(validate_plan(&plan).is_ok());
+    }
     #[test]
     fn tampered_actions_and_adapter_identities_are_rejected_before_elevation() {
         let mut change = Change {

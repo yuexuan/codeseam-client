@@ -20,6 +20,9 @@
   align-items: center;
   padding-left: var(--logo-gutter);
 }
+.virtualShell {
+  --page-gutter: clamp(24px, 3.125vw, 48px);
+}
 .titlebar img {
   width: var(--logo-size);
   height: var(--logo-size);
@@ -108,6 +111,10 @@ li[aria-current] .number {
 .nodesShell .content {
   scrollbar-gutter: auto;
 }
+.nodesContent {
+  overflow: hidden;
+  min-height: 0;
+}
 .footer {
   display: flex;
   align-items: center;
@@ -144,4 +151,15 @@ li[aria-current] .number {
   color: var(--on-primary);
   border-color: var(--success);
   box-shadow: var(--shadow);
+}
+
+.virtualShell .footer {
+  padding-bottom: 2.4rem;
+}
+.virtualShell .footer > button {
+  min-height: 3.45rem;
+  font-size: 1.4rem;
+}
+.virtualShell .footer > button:first-child {
+  min-width: 9.7rem;
 }

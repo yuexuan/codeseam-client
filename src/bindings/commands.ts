@@ -5,6 +5,22 @@
 
 
 export const commands = {
+async claudeCleanup(action: string, ids: string[]) : Promise<Result<CleanupReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("claude_cleanup", { action, ids }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async prepareBrowser(virtualRuntime: boolean, browser: string) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("prepare_browser", { virtualRuntime, browser }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readStartup() : Promise<Result<Startup, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_startup") };
@@ -69,9 +85,65 @@ async removeNode(id: string) : Promise<Result<null, AppError>> {
     else return { status: "error", error: e  as any };
 }
 },
-async testNodes() : Promise<Result<null, AppError>> {
+async testNodes(ids: string[]) : Promise<Result<null, AppError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("test_nodes") };
+    return { status: "ok", data: await TAURI_INVOKE("test_nodes", { ids }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearNodes() : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_nodes") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readRuntime() : Promise<Result<RuntimeReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_runtime") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async virtualOperation(action: string, payload: string) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("virtual_operation", { action, payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readHypervCompatibility() : Promise<Result<Check[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_hyperv_compatibility") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmNativeRuntime(revision: string) : Promise<Result<RuntimeReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_native_runtime", { revision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyRuntimeSetting(setting: RuntimeSetting, revision: string, target: string | null) : Promise<Result<RuntimeReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_runtime_setting", { setting, revision, target }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openRuntimeSetting(setting: RuntimeSetting) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_runtime_setting", { setting }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -91,15 +163,19 @@ async testNodes() : Promise<Result<null, AppError>> {
 
 export type AppError = { operation: string; message: string }
 export type Check = { id: string; group: Group; label: string; value: string; status: Status; detail: string; source: string; blocking: boolean }
+export type CleanupItem = { id: string; label: string; detail: string }
+export type CleanupReport = { items: CleanupItem[]; codeInstalled: boolean; desktopInstalled: boolean; canRestore: boolean; warnings: string[] }
 export type GeneralProxy = { protocol: string; server: string; port: number; username: string; password: string }
 export type Group = "system" | "apps" | "network" | "runtime"
 export type ImportResult = { added: number; duplicates: number }
 export type NodeSnapshot = { nodes: NodeSummary[]; selectedId: string | null; runtime: ProxyRuntime }
-export type NodeSummary = { id: string; name: string; protocol: string; region: string | null; countryCode: string | null; latency: number | null; exitIp: string | null; status: string }
+export type NodeSummary = { id: string; name: string; protocol: string; region: string | null; countryCode: string | null; latency: number | null; exitIp: string | null; status: string; error?: string | null }
 export type ProxyRuntime = { running: boolean | null; version: string | null }
-export type RecoveryAction = "cli" | "ipv6" | "dns"
+export type RecoveryAction = "time_sync" | "timezone" | "cli" | "ipv6" | "dns"
 export type RecoveryItem = { message: string; action: RecoveryAction | null }
 export type Report = { checks: Check[]; observedAt: string }
+export type RuntimeReport = { checks: Check[]; node: NodeSummary; observedAt: string; revision: string; confirmed: boolean; ready: boolean; targetTimezone: string | null }
+export type RuntimeSetting = "timezone" | "time_sync" | "language" | "dns" | "ipv6"
 export type ScanPhase = "not_started" | "scanning" | "completed" | "interrupted"
 export type Startup = { schema: number; scanPhase: ScanPhase; lastObservedAt: string | null; recovery: RecoveryItem[] }
 export type Status = "satisfied" | "pending" | "unknown" | "optional" | "unsupported"

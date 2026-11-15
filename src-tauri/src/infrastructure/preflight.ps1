@@ -95,7 +95,7 @@ Probe 'configuration' 'apps' 'Claude 配置线索' 'settings.json / environment 
  $exists=Test-Path -LiteralPath (Join-Path $base 'settings.json')
  $names=@('ANTHROPIC_BASE_URL','ANTHROPIC_AUTH_TOKEN','ANTHROPIC_API_KEY','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY')
  $present=@($names|Where-Object { [Environment]::GetEnvironmentVariable($_,'Process') -or [Environment]::GetEnvironmentVariable($_,'User') -or [Environment]::GetEnvironmentVariable($_,'Machine') })
- Add 'configuration' 'apps' 'Claude 配置线索' $(if($exists -or $present.Count){'发现配置线索'}else{'未发现已知线索'}) 'unknown' "settings.json 存在：$exists；相关环境变量 $($present.Count) 项（不保存或展示值）。详细归属扫描在第三步。" '文件存在性 / 环境变量存在性'
+ Add 'configuration' 'apps' 'Claude 配置线索' $(if($exists -or $present.Count){'发现配置线索'}else{'未发现已知线索'}) 'unknown' "settings.json 存在：$exists；相关环境变量 $($present.Count) 项（不保存或展示值）。详细归属扫描在第四步。" '文件存在性 / 环境变量存在性'
 }
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 ConvertTo-Json -InputObject @($checks.ToArray()) -Depth 6 -Compress

@@ -1,0 +1,237 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0 1rem 0.6rem;
+}
+.header h1 {
+  font-size: var(--font-title);
+  margin: 0 0 0.4rem;
+  letter-spacing: var(--title-tracking);
+}
+.header p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: var(--font-subtitle);
+}
+.node {
+  text-align: right;
+  color: var(--secondary);
+  font-size: var(--font-base);
+  max-width: 45%;
+  overflow-wrap: anywhere;
+}
+.node span {
+  font-size: var(--font-base);
+}
+.columns {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 1rem;
+  flex: 1;
+  margin-top: 0.4rem;
+}
+.panel {
+  padding: 1.2rem 1.35rem;
+  min-width: 0;
+}
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0 0 1.3rem;
+  font-size: var(--font-heading);
+}
+.panel h2 > svg,
+.icon {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.panel h2 > svg {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+.panelTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1.5rem 6.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 3.2rem;
+  padding: 0.6rem 0.2rem;
+  border-bottom: 1px solid var(--separator);
+  font-size: var(--font-base);
+}
+.row:last-child {
+  border-bottom: 0;
+}
+.native .row {
+  min-height: 2.7rem;
+  padding-block: 0.4rem;
+}
+.native .panel {
+  padding-block: 0.9rem;
+}
+.native .panel h2 {
+  margin-bottom: 0.6rem;
+}
+.value {
+  color: var(--secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.warning {
+  color: var(--warning);
+}
+.caption {
+  color: var(--muted);
+  font-size: var(--font-base);
+  margin: 0.7rem 0 0;
+}
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+.right > .panel:only-child {
+  flex: 1;
+}
+.choices {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+.choice,
+.selected {
+  display: flex;
+  gap: 1.2rem;
+  align-items: flex-start;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  padding: 1.7rem 1.3rem;
+  min-height: 8rem;
+  cursor: pointer;
+}
+.selected {
+  border: 2px solid var(--brand);
+  background: var(--selected-surface);
+}
+
+.choices label > svg {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.choices h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.45rem;
+}
+.choices p {
+  margin: 0.2rem 0 0.7rem;
+  color: var(--secondary);
+}
+.choices small {
+  font-size: var(--font-sm);
+  color: var(--muted);
+}
+.setting {
+  padding-block: var(--space-2);
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.5rem;
+  border-bottom: 1px solid var(--separator);
+}
+.setting > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-base);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--selected-surface);
+  font-size: var(--font-base);
+  margin: 0.7rem 0;
+}
+.panel .notice > svg {
+  flex-shrink: 0;
+}
+.error {
+  color: var(--danger);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (width <= 1200px) {
+  .row {
+    grid-template-columns: 1.5rem 6.1rem minmax(0, 1fr) auto;
+    gap: 0.7rem;
+  }
+}
+@media (width <= 800px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+  .node {
+    max-width: 100%;
+    text-align: left;
+  }
+}
+@media (height <= 800px) {
+  .row,
+  .native .row {
+    min-height: 2.5rem;
+    padding-block: 0.3rem;
+  }
+  .panel {
+    padding: 0.85rem 1.1rem;
+  }
+  .panel h2 {
+    margin-bottom: 0.7rem;
+  }
+  .notice {
+    margin-block: 0.4rem;
+    padding: 0.5rem;
+  }
+  .setting {
+    min-height: 2.5rem;
+  }
+}
+
+.row > strong {
+  white-space: nowrap;
+}
+.row > .icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}

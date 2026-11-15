@@ -1,5 +1,4 @@
 import {
-  Check as CheckIcon,
   Monitor,
   Layers,
   Wifi,
@@ -11,9 +10,7 @@ import {
   AppWindow,
   Cpu,
   Router,
-  CircleCheck,
   CircleHelp,
-  CircleAlert,
   LoaderCircle,
   Info,
   RotateCw,
@@ -23,6 +20,7 @@ import type { Check, Group, Report } from '../../bindings/commands';
 import { Button } from '../../components/ui/Button';
 import { Surface } from '../../components/ui/Surface';
 import { StatusLabel } from '../../components/ui/StatusLabel';
+import { DetectionSummary } from '../../components/ui/DetectionSummary';
 import { summarize } from './model';
 import styles from './PreflightPage.module.css';
 const groups: {
@@ -86,11 +84,6 @@ export function PreflightPage({
   onRefresh: () => void;
 }) {
   const summary = report ? summarize(report) : null;
-  const Icon = error
-    ? CircleAlert
-    : scanning || !report
-      ? LoaderCircle
-      : CheckIcon;
   return (
     <>
       <div className={styles.header}>
@@ -107,52 +100,37 @@ export function PreflightPage({
           <RotateCw size={23} />
         </Button>
       </div>
-      <Surface className={styles.summary} aria-live="polite">
-        <div
-          className={`${styles.summaryIcon} ${error ? styles.failed : scanning || !report ? styles.working : ''}`}
-        >
-          <Icon size={45} aria-hidden="true" />
-        </div>
-        <div className={styles.summaryText}>
-          <h2>
-            {scanning
-              ? '正在检查运行环境'
-              : error
-                ? '本次检查未完成'
-                : report
-                  ? '基础检查已完成'
-                  : '准备检查运行环境'}
-          </h2>
-          <p>
-            {error ||
-              (scanning
-                ? '正在读取系统基础信息'
-                : summary?.pending
-                  ? '部分项目需配置，接下来将逐项完成准备'
-                  : '接下来将添加代理节点，选择当前使用的出口')}
-          </p>
-          <div className={styles.counts}>
-            {summary && !scanning && !error && (
-              <>
-                <span className={styles.badge}>{summary.pending} 项待处理</span>
-                <span className={styles.unknown}>
-                  {summary.unknown} 项无法确认
-                </span>
-                <span className={styles.unknown}>
-                  {summary.optional} 项可选
-                </span>
-                <span className={styles.complete}>
-                  <CircleCheck size={18} />
-                  已完成初步检测
-                </span>
-              </>
-            )}
-            {report && (scanning || error) && (
-              <span className={styles.unknown}>下方为上次结果，已过期</span>
-            )}
-          </div>
-        </div>
-      </Surface>
+      <DetectionSummary
+        state={
+          scanning
+            ? 'scanning'
+            : error
+              ? 'error'
+              : report
+                ? 'completed'
+                : 'idle'
+        }
+        title={
+          scanning
+            ? '正在检查运行环境'
+            : error
+              ? '本次检查未完成'
+              : report
+                ? '基础检查已完成'
+                : '准备检查运行环境'
+        }
+        description={
+          error ||
+          (scanning
+            ? '正在读取系统基础信息'
+            : summary?.pending
+              ? '部分项目需配置，接下来将逐项完成准备'
+              : '接下来将添加代理节点，选择当前使用的出口')
+        }
+        counts={summary ?? undefined}
+        completeLabel="已完成初步检测"
+        stale={!!report && (scanning || !!error)}
+      />
       <div className={styles.grid}>
         {groups.map((group) => {
           const items = report

@@ -1,6 +1,6 @@
 # CodeSeam
 
-Windows 优先的独立本地桌面应用。当前交付为环境预检首稿：读取本机系统、Claude 应用、网络与可选运行能力，识别旧受管备份，按明确确认执行已有备份恢复。
+Windows 优先的独立本地桌面应用。当前已交付环境预检、节点与代理及本机运行环境选择确认：读取本机系统、Claude 应用、网络与可选运行能力，识别旧受管备份，按明确确认执行已有备份恢复。
 
 不需要 CodeSeam 登录、业务服务端、激活或计费。Claude 官方登录由用户在官方应用完成。必要联网能力按产品后续阶段接入；纯本地不等于完全离线。
 
@@ -10,7 +10,7 @@ Windows 10/11 64 位，Node.js 22、Rust stable、Visual Studio C++ Build Tools 
 
 ```powershell
 npm ci
-pwsh -File scripts/prepare-mihomo.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1
 npm run tauri dev
 npm run check
 npm test
@@ -21,17 +21,21 @@ npm run tauri -- build --bundles nsis
 
 前端界面预览：`npm run dev`，打开 `http://127.0.0.1:1420/?preview=default`。仅开发模式且显式携带 preview 参数时使用固定演示场景。普通浏览器无该参数时说明需桌面运行；正式包不存在模拟成功回退。
 
+运行环境检测仅在桌面应用中使用真实 Windows 接口，不再提供 mock 数据。原浏览器链接 `http://127.0.0.1:1420/?preview=default&step=runtime` 显示桌面运行提示。开发使用 `npm run tauri dev`；安装包测试使用 `npm run tauri -- build --bundles nsis` 生成的安装程序，安装后完成真实节点出口测试，再进入运行环境步骤。本机运行按当前节点目标自动检测；出口、时区、语言、DNS、IPv6 与时间服务全部匹配后自动解锁继续，继续时后端再次复检并保存所选 Runtime。时区与 DNS 在应用内选择方案后一键应用，IPv6 一键关闭全部可配置网卡，时间服务可一键开启；复用 UAC 辅助进程、DPAPI 原值备份与冲突恢复，完成后自动读取结果。系统语言仍使用 Windows 语言设置。未实测路径保持待验证。
+
+已保存真实节点的本机只读复测：`cargo test --manifest-path src-tauri/Cargo.toml installed_runtime_probe -- --ignored --nocapture`。此测试调用生产运行环境检测和真实节点出口复测，不注入节点或 Windows 数据，不应用系统设置。没有已选择且测试成功的节点时会明确失败。常规自动化测试仍保留隔离的测试输入。
+
 开发场景：default、partial、failure、refresh-failure、interrupted、recovery。生产 App 由原生接口读取真实 Windows 事实，读写检查点；不在预检中修改网络、安装或启动 Claude。
 
 ## 当前范围
 
 - 单应用根目录：src、src-tauri、docs、scripts。旧云端与模型中转实现已退出活动源码与依赖。
-- 六阶段导航已建立，环境预检与节点导入已实现；后续阶段尚未交付。
+- 六阶段导航已建立，环境预检、节点导入、运行环境选择与本机确认已实现；Claude 与浏览器阶段尚未交付。顺序为预检 → 节点与代理 → 运行环境 → Claude 应用 → 浏览器 → 确认完成。
 - 支持 Clash YAML、Base64 URI 订阅和 SS/VMess/VLESS/Trojan；HTTP(S) 地址下载为订阅内容，Mihomo provider API 校验后导入，按连接配置去重。
 - Mihomo v1.19.34 随包提供，按需启动并自动退出；四路并发检测通过 delay API 和节点独立监听端口读取 Cloudflare trace 的真实出口 IP、国家/地区。失败不生成位置。
 - 节点面板固定高度，列表内部滚动；开发预览不获取订阅、不模拟订阅成功。
 - 已安装、已检测、已验证、未知与可选分开；浏览器/应用存在不代表网络路径已验证。
-- 旧 CLI、DNS、IPv6 备份恢复有确认与冲突检查。缺少可信原值/归属的旧 Desktop 与插件配置明确要求人工核对，不猜测恢复，不删除用户登录或项目。
+- 旧 CLI、DNS、IPv6、时区、时间服务备份恢复有确认与冲突检查。缺少可信原值/归属的旧 Desktop 与插件配置明确要求人工核对，不猜测恢复，不删除用户登录或项目。
 - 关闭初始化窗口即退出；重开重新读取事实，上次 scanning 记录识别为中断；不生成假的正式基线。
 
 ## 构建与打包

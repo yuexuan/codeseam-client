@@ -11,6 +11,7 @@ const examples: NodeSummary[] = [
     latency: 68,
     exitIp: '103.135.22.18',
     status: 'connected',
+    error: null,
   },
   {
     id: 'hk',
@@ -21,6 +22,7 @@ const examples: NodeSummary[] = [
     latency: 42,
     exitIp: '192.0.2.42',
     status: 'connected',
+    error: null,
   },
   {
     id: 'us',
@@ -31,6 +33,7 @@ const examples: NodeSummary[] = [
     latency: 189,
     exitIp: '192.0.2.189',
     status: 'connected',
+    error: null,
   },
   {
     id: 'jp',
@@ -41,6 +44,7 @@ const examples: NodeSummary[] = [
     latency: 95,
     exitIp: '192.0.2.95',
     status: 'connected',
+    error: null,
   },
 ];
 export function createNodesPreview(scenario: string): NodesService {
@@ -57,10 +61,25 @@ export function createNodesPreview(scenario: string): NodesService {
       latency: null,
       exitIp: null,
       status: 'untested',
+      error: null,
     });
   };
   const identities = new Set<string>();
+  const listeners = new Set<(snapshot: NodeSnapshot) => void>();
+  let running = false;
+  const snapshot = (): NodeSnapshot => ({
+    nodes: structuredClone(nodes),
+    selectedId,
+    runtime: { running, version: 'v1.19.34' },
+  });
+  const publish = () => listeners.forEach((listener) => listener(snapshot()));
   return {
+    subscribe: async (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     read: async (): Promise<NodeSnapshot> => ({
       nodes: structuredClone(nodes),
       selectedId,
@@ -123,15 +142,48 @@ export function createNodesPreview(scenario: string): NodesService {
       nodes = nodes.filter((node) => node.id !== id);
       if (selectedId === id) selectedId = null;
     },
-    test: async () => {
-      await wait();
+    clear: async () => {
+      nodes = [];
+      selectedId = null;
+      identities.clear();
+    },
+    test: async (ids) => {
       if (scenario === 'service-failure') throw new Error('代理服务暂不可用');
+      running = true;
       nodes = nodes.map((node) => ({
         ...node,
-        latency: scenario === 'test-failure' ? null : (node.latency ?? 86),
-        exitIp: scenario === 'test-failure' ? null : node.exitIp,
-        status: scenario === 'test-failure' ? 'failed' : 'connected',
+        status: 'queued',
+        latency: null,
+        region: null,
+        countryCode: null,
+        exitIp: null,
+        error: null,
       }));
+      publish();
+      for (let start = 0; start < ids.length; start += 8) {
+        const batch = ids.slice(start, start + 8);
+        nodes.forEach((node) => {
+          if (batch.includes(node.id)) node.status = 'testing';
+        });
+        publish();
+        await wait();
+        nodes.forEach((node) => {
+          if (!batch.includes(node.id)) return;
+          const failed = scenario === 'test-failure';
+          const example = examples.find((item) => item.id === node.id);
+          Object.assign(node, {
+            latency: failed ? null : (example?.latency ?? 380),
+            exitIp: failed ? null : '192.0.2.1',
+            region: failed ? null : (example?.region ?? '日本'),
+            countryCode: failed ? null : (example?.countryCode ?? 'jp'),
+            status: failed ? 'failed' : 'connected',
+            error: failed ? '出口检测超时，请检查节点连通性' : null,
+          });
+        });
+        publish();
+      }
+      running = false;
+      publish();
     },
   };
 }

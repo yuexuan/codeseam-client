@@ -1,0 +1,255 @@
+/* stylelint-disable no-descending-specificity */
+.page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.header {
+  margin: 0 0 1rem 0.7rem;
+}
+.header h1 {
+  margin: 0 0 0.2rem;
+  font-size: var(--font-title);
+  letter-spacing: var(--title-tracking);
+}
+.header p {
+  margin: 0;
+  font-size: var(--font-subtitle);
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.59fr) minmax(0, 1fr);
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.8rem 1.5rem 1.1rem;
+}
+.title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--separator);
+}
+.columns h2 {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin: 0;
+  font-size: var(--font-heading);
+}
+.columns h2 > svg {
+  color: var(--brand);
+  width: 1.8rem;
+  height: 1.8rem;
+}
+.count {
+  font-size: var(--font-lg);
+  margin: 1rem 0 0.4rem;
+}
+.count strong {
+  color: var(--brand-strong);
+}
+.items {
+  flex: 1;
+  overflow: auto;
+  min-height: 5rem;
+}
+.row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--separator);
+  cursor: pointer;
+}
+.row input {
+  accent-color: var(--brand);
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+.appIcon {
+  background: var(--surface);
+  border: 1px solid var(--selected-line);
+  border-radius: var(--radius-md);
+  padding: 0.8rem;
+  color: var(--brand);
+}
+.appIcon svg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+.description {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--line-strong);
+  padding-left: 1.5rem;
+}
+.description strong {
+  font-size: var(--font-lg);
+}
+.description > span {
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+.pending {
+  color: var(--brand-strong);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+.bottom {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.bottom p {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--secondary);
+  font-size: var(--font-sm);
+  flex: 1;
+}
+.bottom p svg {
+  flex-shrink: 0;
+}
+.right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  overflow: auto;
+}
+.panel {
+  padding: 1rem 1.6rem;
+}
+.panel > p {
+  margin: 0.8rem 0 0.2rem;
+}
+.summaryRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--separator);
+}
+.summaryRow > svg {
+  color: var(--brand);
+  flex-shrink: 0;
+}
+.summaryRow > strong {
+  flex: 1;
+}
+.summaryRow > strong + span {
+  color: var(--success);
+}
+.panel dl {
+  margin: 0.7rem 0;
+}
+.panel dl div {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--separator);
+}
+.panel dd {
+  margin: 0;
+}
+.progress {
+  color: var(--success);
+  padding: 0.5rem 0;
+}
+.hint {
+  font-size: var(--font-xs);
+  color: var(--secondary);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+.actions > span {
+  color: var(--secondary);
+  font-size: var(--font-sm);
+}
+.error {
+  color: var(--danger);
+}
+.empty {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  color: var(--success);
+  padding: 2rem 0;
+}
+@media (width <= 1000px) {
+  .columns {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .main {
+    min-height: 26rem;
+  }
+  .right {
+    overflow: visible;
+  }
+  .row {
+    gap: 0.7rem;
+  }
+  .bottom {
+    flex-wrap: wrap;
+  }
+}
+
+.right > :last-child {
+  flex: 1;
+}
+.stages {
+  display: flex;
+  justify-content: space-between;
+  padding: 0;
+  margin: 0.8rem 0 0;
+  list-style: none;
+  color: var(--muted);
+  gap: 0.5rem;
+}
+.stages li {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: var(--font-sm);
+}
+.stages .done {
+  color: var(--success);
+}
+@media (height <= 760px) and (width > 1000px) {
+  .panel {
+    padding: 0.6rem 1.2rem;
+  }
+  .panel dl div {
+    padding: 0.3rem 0;
+  }
+  .panel > p {
+    margin-top: 0.4rem;
+  }
+  .columns h2 {
+    font-size: 1.4rem;
+  }
+  .summaryRow {
+    padding: 0.3rem 0;
+  }
+}

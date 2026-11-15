@@ -4,9 +4,9 @@
   "version": "0.5.1",
   "identifier": "app.codeseam.desktop",
   "build": {
-    "beforeDevCommand": "pwsh -File scripts/prepare-mihomo.ps1 && npm run dev",
+    "beforeDevCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pwsh -File scripts/prepare-mihomo.ps1 && npm run build",
+    "beforeBuildCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

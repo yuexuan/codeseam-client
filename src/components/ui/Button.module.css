@@ -59,3 +59,9 @@
     opacity: 1;
   }
 }
+
+.back {
+  margin-right: auto;
+  font-size: var(--font-lg);
+  padding: var(--space-3) var(--space-6);
+}

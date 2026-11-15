@@ -12,6 +12,8 @@ pub struct NodeSummary {
     pub latency: Option<u32>,
     pub exit_ip: Option<String>,
     pub status: String,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

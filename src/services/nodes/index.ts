@@ -14,7 +14,8 @@ export interface NodesService {
   importProxy(proxy: GeneralProxy): Promise<ImportResult>;
   select(id: string): Promise<void>;
   remove(id: string): Promise<void>;
-  test(): Promise<void>;
+  clear(): Promise<void>;
+  test(ids: string[]): Promise<void>;
 }
 export const nativeNodes: NodesService = {
   subscribe: (listener) =>
@@ -47,9 +48,14 @@ export const nativeNodes: NodesService = {
       const result = await commands.removeNode(id);
       if (result.status === 'error') throw result.error;
     }),
-  test: () =>
+  clear: () =>
+    call('clear_nodes', async () => {
+      const result = await commands.clearNodes();
+      if (result.status === 'error') throw result.error;
+    }),
+  test: (ids) =>
     call('test_nodes', async () => {
-      const result = await commands.testNodes();
+      const result = await commands.testNodes(ids);
       if (result.status === 'error') throw result.error;
     }),
 };

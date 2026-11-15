@@ -1,15 +1,15 @@
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .dialog > div {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
 }
-.nodeChoice input {
-  width: 1.4rem;
-  height: 1.4rem;
-  margin: 0;
-  accent-color: var(--brand-strong);
-  cursor: pointer;
-}
+
 .proxyForm input {
   font-size: 1.1rem;
   min-height: 3.2rem;
@@ -19,38 +19,43 @@
   height: 1.5rem;
 }
 .header {
+  flex-shrink: 0;
   margin: 0 0 1rem 0.7rem;
 }
 .header h1 {
   margin: 0 0 0.2rem;
-  font-size: 2.25rem;
+  font-size: var(--font-title);
   line-height: 1.2;
   letter-spacing: var(--title-tracking);
 }
 .header p {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--font-subtitle);
 }
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1.59fr) minmax(0, 1fr);
   gap: 1rem;
-  height: 42rem;
+  flex: 1;
   min-height: 0;
 }
 .nodes {
+  min-height: 0;
   padding: 0.6rem 1.5rem 1.25rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
 }
+.nodes > :not(.nodeList) {
+  flex-shrink: 0;
+}
 .layout h2 {
   display: flex;
   align-items: center;
   gap: 1.2rem;
   margin: 0;
-  font-size: 1.55rem;
+  font-size: var(--font-heading);
   line-height: 1.65;
 }
 .layout h2 > svg {
@@ -118,7 +123,7 @@
   min-width: 7.2rem;
   padding: 0.55rem 0.7rem;
   min-height: 3rem;
-  font-size: 1.15rem;
+  font-size: var(--font-subtitle);
 }
 .clashForm .importButton {
   margin-bottom: 0.5rem;
@@ -168,7 +173,7 @@
 }
 .testButton {
   padding: 0.3rem 1rem;
-  font-size: 1.15rem;
+  font-size: var(--font-subtitle);
 }
 .nodeList {
   flex: 1;
@@ -192,7 +197,7 @@
 }
 .nodeChoice {
   display: grid;
-  grid-template-columns: 1.9rem minmax(0, 1.6fr) minmax(0, 1fr) 10.8rem;
+  grid-template-columns: 1.9rem minmax(0, 1fr) 5rem 6.5rem;
   align-items: center;
   gap: 1rem;
   padding: 0.3rem 0.7rem 0.3rem 1.15rem;
@@ -206,7 +211,7 @@
   align-items: center;
   gap: 0.9rem;
   min-width: 0;
-  font-weight: 700;
+  font-weight: 400;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -218,15 +223,16 @@
   border-radius: 0.2rem;
 }
 .region {
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  color: var(--secondary);
 }
 .latency {
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 400;
 }
 .good {
   color: var(--success);
-  font-weight: 700;
+  font-weight: 400;
 }
 .deleteButton,
 .dialogClose {
@@ -243,7 +249,7 @@
 }
 .side {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 1rem;
   min-width: 0;
 }
@@ -293,7 +299,7 @@
   border-radius: var(--radius-sm);
   background: var(--connected-surface);
   color: var(--success);
-  font-size: 1.15rem;
+  font-size: var(--font-subtitle);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -360,7 +366,7 @@
   .nodeChoice {
     gap: 0.5rem;
     padding-left: 0.5rem;
-    grid-template-columns: 1.5rem minmax(0, 1.5fr) minmax(0, 1fr) 4.5rem;
+    grid-template-columns: 1.5rem minmax(0, 1fr) 4rem 6rem;
   }
   .runtime,
   .current {
@@ -386,4 +392,43 @@
 
 .dialog::backdrop {
   background: var(--overlay);
+}
+
+.listActions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.iconButton {
+  display: grid;
+  place-items: center;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--secondary);
+  cursor: pointer;
+}
+.iconButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.slow {
+  color: var(--warning);
+}
+.region.failed,
+.failed {
+  color: var(--danger);
+}
+.latency,
+.good,
+.slow,
+.failed {
+  white-space: nowrap;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.nodeRow[data-status='testing'] {
+  background: var(--selected-surface);
 }

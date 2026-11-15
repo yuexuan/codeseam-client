@@ -1,0 +1,98 @@
+use crate::infrastructure::{vault, windows};
+use base64::{engine::general_purpose::STANDARD, Engine};
+
+fn controller_script() -> String {
+    // 文件 BOM 只允许出现在开头，不能插入到文件中间。
+    include_str!("../infrastructure/virtual_runtime.ps1")
+        .trim_start_matches('\u{feff}')
+        .replace("# GUEST_FUNCTIONS", include_str!("../infrastructure/guest_install.ps1").trim_start_matches('\u{feff}'))
+        .replace("# GUEST_BROWSER", include_str!("../infrastructure/guest_browser.ps1").trim_start_matches('\u{feff}'))
+}
+
+pub fn execute(action: String, payload: String) -> Result<String, String> {
+    if action == "status" {
+        let path = vault::dir()?.join("Virtual").join("guest-progress.json");
+        return match std::fs::read_to_string(path) {
+            Ok(data) => { serde_json::from_str::<serde_json::Value>(&data.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())?; Ok(data.trim_start_matches('\u{feff}').to_owned()) },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::json!({"name":"", "state":"Preparing", "ready":false,"progress":0,"detail":"正在准备自动初始化任务"}).to_string()),
+            Err(e) => Err(e.to_string()),
+        };
+    }
+    if action == "initialize" {
+        vault::save(
+            "virtual-node-v1.dpapi",
+            &serde_json::to_vec(&super::nodes::virtual_node_config()?)
+                .map_err(|e| e.to_string())?,
+        )?;
+    }
+    if action == "image_status" {
+        return Ok(crate::infrastructure::installation_image::status().to_string());
+    }
+    if action == "prepare_image" {
+        let input: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
+        let path = crate::infrastructure::installation_image::prepare(
+            input["iso"].as_str().ok_or("缺少安装镜像地址")?,
+            &vault::dir()?.join("Virtual").join("Images"),
+        )?;
+        return Ok(serde_json::json!({"path": path}).to_string());
+    }
+    if ![
+        "read",
+        "enable",
+        "create",
+        "status",
+        "restart",
+        "initialize",
+        "browser_prepare",
+        "ensure_ready",
+    ]
+    .contains(&action.as_str())
+    {
+        return Err("未知虚拟机操作".into());
+    }
+    let input: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
+    let node = if action == "create" {
+        let snapshot = super::nodes::read()?;
+        Some(
+            snapshot
+                .nodes
+                .into_iter()
+                .find(|n| {
+                    Some(&n.id) == snapshot.selected_id.as_ref()
+                        && n.status == "connected"
+                        && n.exit_ip.is_some()
+                })
+                .ok_or("请先选择并测试节点")?,
+        )
+    } else {
+        None
+    };
+    let request = serde_json::json!({"action": action, "config": input, "root": vault::dir()?.join("Virtual"), "node": node});
+    let script = format!("$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')) | ConvertFrom-Json\n{}", STANDARD.encode(request.to_string()), controller_script());
+    let result: serde_json::Value =
+        windows::run_script_with_timeout(script.as_bytes(), std::time::Duration::from_secs(600))?;
+    Ok(result.to_string())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    #[test]
+    fn assembled_controller_parses_without_running_system_operations() {
+        use base64::Engine;
+        let script = super::controller_script();
+        assert!(!script.contains('\u{feff}'));
+        let encoded = base64::engine::general_purpose::STANDARD.encode(script.as_bytes());
+        let probe = format!("$s = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')); $null = [ScriptBlock]::Create($s); @{{parsed=$true}} | ConvertTo-Json", encoded);
+        let result: serde_json::Value = crate::infrastructure::windows::run_script(probe.as_bytes()).unwrap();
+        assert_eq!(result["parsed"], true);
+    }
+
+    #[test]
+    #[ignore = "Starts the user's previously created candidate VM unattended installation"]
+    fn virtual_runtime_auto_install_native() {
+        println!(
+            "{}",
+            super::execute("initialize".into(), "{}".into()).unwrap()
+        );
+    }
+}
