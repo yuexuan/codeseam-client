@@ -4,6 +4,7 @@ pub(crate) mod nodes;
 pub(crate) mod recovery;
 pub(crate) mod runtime;
 pub(crate) mod state;
+pub(crate) mod workbench;
 use crate::{
     domain::{Report, ScanPhase},
     infrastructure::windows,

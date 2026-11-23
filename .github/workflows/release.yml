@@ -22,6 +22,14 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-lifecycle.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-close.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-version.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-launch.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-session.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-timezone.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-console.test.ps1
+      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-controller.test.ps1
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: npm run bindings:check
       - run: npm run tauri -- build --bundles nsis

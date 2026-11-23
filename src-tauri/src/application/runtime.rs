@@ -40,17 +40,51 @@ fn ready(checks: &[Check]) -> bool {
                 .any(|c| c.id == *id && c.status == crate::domain::Status::Satisfied)
     }) && !checks.iter().any(|c| c.blocking)
 }
-fn target_timezone(node: &NodeSummary) -> Option<String> {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TimezoneTarget {
+    pub windows_id: String,
+    pub iana_id: String,
+}
+fn timezone_from_iana(iana: &str) -> Option<TimezoneTarget> {
+    let windows = match iana {
+        "America/Los_Angeles" | "America/Vancouver" => "Pacific Standard Time",
+        "America/Denver" | "America/Edmonton" => "Mountain Standard Time",
+        "America/Chicago" | "America/Winnipeg" => "Central Standard Time",
+        "America/New_York" | "America/Toronto" | "America/Detroit" => "Eastern Standard Time",
+        "Asia/Singapore" => "Singapore Standard Time",
+        "Asia/Shanghai" | "Asia/Hong_Kong" => "China Standard Time",
+        "Asia/Taipei" => "Taipei Standard Time",
+        "Asia/Tokyo" => "Tokyo Standard Time",
+        "Europe/London" => "GMT Standard Time",
+        "Europe/Berlin" | "Europe/Amsterdam" => "W. Europe Standard Time",
+        _ => return None,
+    };
+    // 浏览器提供 Windows 系统时区对应的标准 IANA 时区名称。
+    let canonical = match windows {
+        "Pacific Standard Time" => "America/Los_Angeles",
+        "Mountain Standard Time" => "America/Denver",
+        "Central Standard Time" => "America/Chicago",
+        "Eastern Standard Time" => "America/New_York",
+        "China Standard Time" => "Asia/Shanghai",
+        "W. Europe Standard Time" => "Europe/Berlin",
+        _ => iana,
+    };
+    Some(TimezoneTarget { windows_id: windows.into(), iana_id: canonical.into() })
+}
+pub(super) fn timezone_target(node: &NodeSummary) -> Option<TimezoneTarget> {
+    node.exit_ip.as_ref()?.parse::<std::net::IpAddr>().ok()?;
     let single = match node.country_code.as_deref()? {
-        "sg" => Some("Singapore Standard Time"),
-        "hk" | "cn" | "tw" => Some("China Standard Time"),
-        "jp" => Some("Tokyo Standard Time"),
-        "gb" => Some("GMT Standard Time"),
-        "de" => Some("W. Europe Standard Time"),
+        "sg" => Some("Asia/Singapore"),
+        "hk" | "cn" => Some("Asia/Shanghai"),
+        "tw" => Some("Asia/Taipei"),
+        "jp" => Some("Asia/Tokyo"),
+        "gb" => Some("Europe/London"),
+        "de" => Some("Europe/Berlin"),
         _ => None,
     };
     if let Some(zone) = single {
-        return Some(zone.into());
+        return timezone_from_iana(zone);
     }
     // 对于跨多个时区的国家，需要查询实际出口 IP 的地理位置。
     let ip = node.exit_ip.as_ref()?.parse::<std::net::IpAddr>().ok()?;
@@ -73,21 +107,10 @@ fn target_timezone(node: &NodeSummary) -> Option<String> {
     {
         return None;
     }
-    Some(
-        match geo["timezone"]["id"].as_str()? {
-            "America/Los_Angeles" | "America/Vancouver" => "Pacific Standard Time",
-            "America/Denver" | "America/Edmonton" => "Mountain Standard Time",
-            "America/Chicago" | "America/Winnipeg" => "Central Standard Time",
-            "America/New_York" | "America/Toronto" | "America/Detroit" => "Eastern Standard Time",
-            "Asia/Singapore" => "Singapore Standard Time",
-            "Asia/Shanghai" | "Asia/Hong_Kong" => "China Standard Time",
-            "Asia/Tokyo" => "Tokyo Standard Time",
-            "Europe/London" => "GMT Standard Time",
-            "Europe/Berlin" | "Europe/Amsterdam" => "W. Europe Standard Time",
-            _ => return None,
-        }
-        .into(),
-    )
+    timezone_from_iana(geo["timezone"]["id"].as_str()?)
+}
+fn target_timezone(node: &NodeSummary) -> Option<String> {
+    timezone_target(node).map(|target| target.windows_id)
 }
 fn revision(node: &NodeSummary, checks: &[Check]) -> Result<String, String> {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -240,6 +263,23 @@ pub fn apply_setting(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn timezone_targets_follow_exit_metadata_and_never_default_to_image_zone() {
+        let mut node = NodeSummary { id: "fixture".into(), name: "name is not geolocation".into(), protocol: "http".into(), region: None, country_code: Some("sg".into()), latency: None, exit_ip: Some("203.0.113.10".into()), status: "connected".into(), error: None };
+        let singapore = timezone_target(&node).unwrap();
+        assert_eq!(singapore.windows_id, "Singapore Standard Time");
+        assert_eq!(singapore.iana_id, "Asia/Singapore");
+        node.country_code = Some("jp".into());
+        assert_eq!(timezone_target(&node).unwrap().iana_id, "Asia/Tokyo");
+        assert_eq!(timezone_from_iana("America/New_York").unwrap().windows_id, "Eastern Standard Time");
+        assert_eq!(timezone_from_iana("America/Los_Angeles").unwrap().windows_id, "Pacific Standard Time");
+        assert!(timezone_from_iana("unknown").is_none());
+        node.country_code = None;
+        assert!(timezone_target(&node).is_none());
+        node.country_code = Some("sg".into());
+        node.exit_ip = None;
+        assert!(timezone_target(&node).is_none());
+    }
     #[test]
     #[cfg(windows)]
     #[ignore = "explicit read-only runtime detection using installed real nodes and Windows settings"]

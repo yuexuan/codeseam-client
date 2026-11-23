@@ -7,8 +7,8 @@ import styles from './WindowShell.module.css';
 const steps = [
   '环境预检',
   '节点与代理',
-  '运行环境',
   'Claude 应用',
+  '运行环境',
   '浏览器',
   '确认完成',
 ];
@@ -36,7 +36,7 @@ export function WindowShell({
   };
   return (
     <div
-      className={`${styles.shell} ${step === 1 || step === 2 || step === 3 ? styles.nodesShell : ''} ${virtualRuntime ? styles.virtualShell : ''}`}
+      className={`${styles.shell} ${step === 1 || step === 2 || step === 3 || step === 5 ? styles.nodesShell : ''} ${virtualRuntime ? styles.virtualShell : ''}`}
     >
       <header className={styles.titlebar} data-tauri-drag-region>
         <img src={logo} alt="CodeSeam" draggable={false} />

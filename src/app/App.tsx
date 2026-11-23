@@ -24,13 +24,31 @@ import { RuntimePage } from '../features/runtime/RuntimePage';
 import { VirtualPage } from '../features/runtime/VirtualPage';
 import { nativeRuntime } from '../services/runtime';
 import { ClaudePage } from '../features/claude/ClaudePage';
-import {
-  nativeClaude,
-  virtualClaude,
-  createClaudePreview,
-} from '../services/claude';
+import { nativeClaude, createClaudePreview } from '../services/claude';
 import { BrowserPage } from '../features/browser/BrowserPage';
-import { nativeBrowser, createBrowserPreview } from '../services/browser';
+import {
+  nativeBrowser,
+  createBrowserPreview,
+  type BrowserResult,
+} from '../services/browser';
+import { CompletionPage } from '../features/browser/CompletionPage';
+import { WorkbenchPage } from '../features/workbench/WorkbenchPage';
+import {
+  createWorkbenchPreview,
+  nativeWorkbench,
+  type WorkbenchRecord,
+} from '../services/workbench';
+const workbench =
+  import.meta.env.DEV &&
+  !('__TAURI_INTERNALS__' in window) &&
+  new URLSearchParams(location.search).has('preview')
+    ? createWorkbenchPreview(
+        new URLSearchParams(location.search).get('preview') ?? 'default',
+        new URLSearchParams(location.search).get('step') === 'workbench'
+          ? new URLSearchParams(location.search).has('virtual')
+          : undefined,
+      )
+    : nativeWorkbench;
 const native = '__TAURI_INTERNALS__' in window;
 const scenario = new URLSearchParams(location.search).get('preview');
 const preview = import.meta.env.DEV && !native && scenario !== null;
@@ -59,18 +77,27 @@ const createClient = () =>
     },
   });
 function Content() {
+  const [finished, setFinished] = useState<WorkbenchRecord>();
+  const saved = useQuery({
+    queryKey: ['workbench'],
+    queryFn: () => workbench.read(),
+  });
+  const [completedBrowser, setCompletedBrowser] = useState<BrowserResult>();
   const [virtualRuntime, setVirtualRuntime] = useState(
     preview && new URLSearchParams(location.search).has('virtual'),
   );
-  const { startup, scan } = usePreflight(service);
+  const { startup, scan } = usePreflight(
+    service,
+    saved.isSuccess && !saved.data && !finished,
+  );
   const [step, setStep] = useState(
     preview && new URLSearchParams(location.search).get('step') === 'browser'
       ? 4
       : preview && new URLSearchParams(location.search).get('step') === 'claude'
-        ? 3
+        ? 2
         : preview &&
             new URLSearchParams(location.search).get('step') === 'runtime'
-          ? 2
+          ? 3
           : preview &&
               new URLSearchParams(location.search).get('step') === 'nodes'
             ? 1
@@ -92,6 +119,31 @@ function Content() {
       (n) => n.status === 'testing' || n.status === 'queued',
     );
 
+  if (saved.isPending)
+    return (
+      <div className={styles.unsupported} role="status">
+        正在读取本机初始化记录…
+      </div>
+    );
+  if (saved.isError)
+    return (
+      <div className={styles.unsupported}>
+        <h1>无法读取正式环境记录</h1>
+        <p role="alert">{saved.error.message}</p>
+        <Button onClick={() => void saved.refetch()}>重新读取</Button>
+      </div>
+    );
+  const daily = finished ?? saved.data;
+  if (daily)
+    return (
+      <WorkbenchPage
+        initial={daily}
+        service={workbench}
+        window={controls}
+        preview={preview}
+      />
+    );
+
   return (
     <WindowShell
       window={controls}
@@ -99,7 +151,7 @@ function Content() {
       step={step}
       virtualRuntime={virtualRuntime}
       footer={
-        step === 2 || step === 3 || step === 4 ? null : (
+        step >= 2 ? null : (
           <>
             {step > 0 && <BackButton onClick={() => setStep(step - 1)} />}
             <Button
@@ -139,37 +191,51 @@ function Content() {
       ) : step === 1 ? (
         <NodesPage service={nodes} />
       ) : preview &&
-        step === 2 &&
+        step === 3 &&
         new URLSearchParams(location.search).has('virtual') ? (
-        <VirtualPage onBack={() => setStep(1)} />
-      ) : step === 2 && !native ? (
+        <VirtualPage onBack={() => setStep(2)} onContinue={() => setStep(4)} />
+      ) : step === 3 && !native ? (
         <section>
           <h1>请在 CodeSeam 桌面应用中检测运行环境</h1>
           <p>
             运行环境检测仅使用本机 Windows
             数据，请安装并打开桌面应用，完成节点出口测试后进入此步骤。
           </p>
-          <BackButton onClick={() => setStep(1)} />
+          <BackButton onClick={() => setStep(2)} />
         </section>
-      ) : step === 2 ? (
+      ) : step === 3 ? (
         <RuntimePage
           service={nativeRuntime}
           onVirtualChange={setVirtualRuntime}
+          onBack={() => setStep(2)}
+          onContinue={() => setStep(4)}
+        />
+      ) : step === 2 ? (
+        <ClaudePage
+          service={claude}
+          virtualRuntime={false}
           onBack={() => setStep(1)}
           onContinue={() => setStep(3)}
         />
-      ) : step === 3 ? (
-        <ClaudePage
-          service={virtualRuntime && !preview ? virtualClaude : claude}
+      ) : step === 5 && completedBrowser ? (
+        <CompletionPage
+          result={completedBrowser}
+          service={browser}
           virtualRuntime={virtualRuntime}
-          onBack={() => setStep(2)}
-          onContinue={() => setStep(4)}
+          onBack={() => setStep(4)}
+          workbench={workbench}
+          cleanupService={claude}
+          onComplete={setFinished}
         />
       ) : (
         <BrowserPage
           service={browser}
           virtualRuntime={virtualRuntime}
           onBack={() => setStep(3)}
+          onContinue={(result) => {
+            setCompletedBrowser(result);
+            setStep(5);
+          }}
         />
       )}
     </WindowShell>

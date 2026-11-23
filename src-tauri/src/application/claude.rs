@@ -326,6 +326,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn encrypted_cleanup_restore_and_conflict_guard() {
+        let _lock = crate::infrastructure::TEST_HOME_LOCK.lock().unwrap();
         let root = std::env::temp_dir().join(format!("codeseam-claude-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         std::env::set_var("CODESEAM_CLAUDE_TEST_DIR", &root);

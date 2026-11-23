@@ -11,7 +11,7 @@ function Write-GuestProgress([int]$Index, [string]$Detail, [string]$Status = 'ru
     $script:vm = Get-VM -Id $record.vmId
     $script:tasks[$Index] = @{ status=$Status; detail=$Detail }
     $done = @($script:tasks | Where-Object status -eq 'satisfied').Count
-    $data = @{ name=$record.name; nodeName=$record.node.name; state=$script:vm.State.ToString(); ready=($done -eq 8); desktopSetupVersion=3; progress=[int]($done * 100 / 8); detail=$Detail; tasks=$script:tasks; error=$script:failure; timezone="$script:tz"; language="$script:language"; updatedAt=[DateTime]::UtcNow.ToString('o') }
+    $data = @{ name=$record.name; nodeName=$record.node.name; nodeId=$record.node.id; exitIp=$record.node.exitIp; state=$script:vm.State.ToString(); ready=($done -eq 8); desktopSetupVersion=3; timezonePolicyVersion=1; timezoneTarget=$record.timezoneTarget; progress=[int]($done * 100 / 8); detail=$Detail; tasks=$script:tasks; error=$script:failure; timezone="$script:tz"; language="$script:language"; updatedAt=[DateTime]::UtcNow.ToString('o') }
     $data.startedAt = $script:startedAt
     $data.stepStartedAt = $script:stepStartedAt
     $data.activeIndex = $Index
@@ -45,6 +45,7 @@ function Test-GuestSetupRecovery($Session) {
 # 保持控制台免密码访问，同时不放宽空密码账户的网络策略。
 # PowerShell Direct 使用独立账户，其随机凭据通过 DPAPI 保护。
 function Set-GuestDesktopAccount($Session) {
+    # 远程 ADSI 方法可能输出显式 Null，不能混入安装函数返回的 PSSession。
     Invoke-Command -Session $Session -ErrorAction Stop -ScriptBlock {
         $ErrorActionPreference = 'Stop'
         $user = [ADSI]'WinNT://./CodeSeam,user'
@@ -61,7 +62,7 @@ function Set-GuestDesktopAccount($Session) {
             New-ItemProperty -Path $winlogon -Name $entry.Key -PropertyType String -Value $entry.Value -Force | Out-Null
         }
         Remove-ItemProperty -Path $winlogon -Name AutoLogonCount -ErrorAction SilentlyContinue
-    }
+    } | Out-Null
 }
 function Install-GuestWindows {
     $credentialFile = Join-Path $root 'guest-credential.xml'
@@ -158,7 +159,7 @@ function Install-GuestWindows {
         $record | Add-Member -NotePropertyName preservedDisks -NotePropertyValue @($originalDisks.Path) -Force
         Save-Checkpoint $record
     }
-    if ((Get-VM -Id $record.vmId).State -eq 'Off') { Start-VM -VM $vm }
+    if ((Get-VM -Id $record.vmId).State -eq 'Off') { Start-VM -VM $vm | Out-Null }
     Write-GuestProgress 0 '正在无人值守完成首次启动并连接 Guest'
     $repairAttempted = $false
     $deadline = [DateTime]::UtcNow.AddMinutes(20)
@@ -197,7 +198,7 @@ function Install-GuestWindows {
                         [IO.File]::WriteAllText($path, $answer, [Text.UTF8Encoding]::new($false))
                         # 补齐缺失答案后重新运行 OOBE，同时保留已安装的磁盘和账户。
                         Start-Process -FilePath "$env:SystemRoot\System32\Sysprep\sysprep.exe" -ArgumentList @('/oobe','/reboot','/quiet',('/unattend:' + $path)) -WindowStyle Hidden -ErrorAction Stop | Out-Null
-                    }
+                    } | Out-Null
                 }
             }
             if (!$setupComplete) { Remove-PSSession $session; $session = $null }
@@ -206,6 +207,21 @@ function Install-GuestWindows {
     } while (!$session -and [DateTime]::UtcNow -lt $deadline)
     if (!$session) { throw "Windows 首次启动等待超过 20 分钟。最后状态：$script:lastDetail。请查看虚拟机界面；诊断日志位于 $root\guest-error.log，部署磁盘已保留。" }
     return $session
+}
+function Sync-GuestTimezone($Session, $Target) {
+    if (!$Target.windowsId -or !$Target.ianaId) { throw '所选出口的目标时区尚未确定，请重新测试节点。' }
+    $result = Invoke-Command -Session $Session -ArgumentList $Target.windowsId -ScriptBlock {
+        param($expected)
+        $ErrorActionPreference = 'Stop'
+        Get-TimeZone -Id $expected -ErrorAction Stop | Out-Null
+        if ((Get-TimeZone).Id -ne $expected) { Set-TimeZone -Id $expected -ErrorAction Stop }
+        [TimeZoneInfo]::ClearCachedData()
+        $actual = (Get-TimeZone).Id
+        if ($actual -ne $expected) { throw ('Guest 时区应用失败：' + $actual + '，目标为 ' + $expected) }
+        return $actual
+    }
+    # Strip remoting metadata before persisting or serializing this string.
+    return [string]$result
 }
 function Initialize-Guest {
     $script:startedAt = [DateTime]::UtcNow.ToString('o')
@@ -219,11 +235,12 @@ function Initialize-Guest {
     $index = 0; $session = $null
     try {
         $session = Install-GuestWindows
+        if (!$session) { throw 'Guest 会话未建立，请重试初始化；已部署的 Windows 将继续使用。' }
         Write-GuestProgress 0 'Windows 首次设置已完成，CodeSeam 桌面已就绪' 'satisfied'
         $index = 1
-        Write-GuestProgress 1 '正在读取 Guest 时区'
-        $script:tz = Invoke-Command -Session $session -ScriptBlock { (Get-TimeZone).Id }
-        Write-GuestProgress 1 "Guest 时区：$tz（保留镜像设置）" 'satisfied'
+        Write-GuestProgress 1 '正在按所选代理出口设置 Guest 时区'
+        $script:tz = Sync-GuestTimezone $session $record.timezoneTarget
+        Write-GuestProgress 1 "Guest 时区：$tz（与所选出口一致）" 'satisfied'
         $index = 2
         $script:language = Invoke-Command -Session $session -ScriptBlock { (Get-UICulture).Name }
         Write-GuestProgress 2 "Guest 显示语言：$language（保留镜像设置）" 'satisfied'
@@ -340,7 +357,8 @@ function Initialize-Guest {
         Write-GuestProgress 6 "Guest 实测出口：$observed；IPv6 已关闭，UDP 已阻断" 'satisfied'
         $index = 7
         Write-GuestProgress 7 '正在保存候选环境基线'
-        $baseline = @{vmId=$record.vmId; nodeId=$record.node.id; exitIp="$observed"; timezone="$tz"; language="$language"; measuredAt=[DateTime]::UtcNow.ToString('o'); tasks=$script:tasks}
+        $script:tz = Sync-GuestTimezone $session $record.timezoneTarget
+        $baseline = @{vmId=$record.vmId; nodeId=$record.node.id; exitIp="$observed"; timezone="$tz"; timezoneTarget=$record.timezoneTarget; language="$language"; measuredAt=[DateTime]::UtcNow.ToString('o'); tasks=$script:tasks}
         Checkpoint-VM -VM $vm -SnapshotName 'CodeSeam-Initialized' | Out-Null
         $script:tasks[7] = @{status='satisfied';detail='候选基线与恢复检查点已生成'}
         $baseline.tasks = $script:tasks

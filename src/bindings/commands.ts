@@ -21,6 +21,22 @@ async prepareBrowser(virtualRuntime: boolean, browser: string) : Promise<Result<
     else return { status: "error", error: e  as any };
 }
 },
+async browserAction(virtualRuntime: boolean, browser: string, action: string) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("browser_action", { virtualRuntime, browser, action }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workbenchOperation(action: string, payload: string) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workbench_operation", { action, payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async readStartup() : Promise<Result<Startup, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_startup") };

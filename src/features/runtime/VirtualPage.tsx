@@ -141,8 +141,14 @@ export function VirtualPage({
         return;
       }
       if (kind === 'continue') {
-        if (!preview)
-          await virtualOperation('ensure_ready', { openConsole: true });
+        if (!preview) {
+          const result = await virtualOperation<{
+            ready: boolean;
+            consoleOpened: boolean;
+          }>('ensure_ready', { openConsole: true });
+          if (!result.ready || !result.consoleOpened)
+            throw new Error('目标虚拟机桌面或连接窗口尚未就绪，请重试。');
+        }
         onContinue();
         return;
       }
@@ -593,7 +599,9 @@ export function VirtualPage({
             ? '重试'
             : action.isPending
               ? phase === 'guest'
-                ? '正在打开虚拟机窗口…'
+                ? action.variables === 'retry'
+                  ? '正在重试初始化…'
+                  : '正在确认 Guest 与虚拟机窗口…'
                 : '正在初始化…'
               : phase === 'guest' || preparing
                 ? '下一步 →'

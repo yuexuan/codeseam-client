@@ -18,13 +18,6 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
             Err(e) => Err(e.to_string()),
         };
     }
-    if action == "initialize" {
-        vault::save(
-            "virtual-node-v1.dpapi",
-            &serde_json::to_vec(&super::nodes::virtual_node_config()?)
-                .map_err(|e| e.to_string())?,
-        )?;
-    }
     if action == "image_status" {
         return Ok(crate::infrastructure::installation_image::status().to_string());
     }
@@ -50,8 +43,8 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
     {
         return Err("未知虚拟机操作".into());
     }
-    let input: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
-    let node = if action == "create" {
+    let mut input: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
+    let node = if ["create", "initialize", "ensure_ready", "browser_prepare"].contains(&action.as_str()) {
         let snapshot = super::nodes::read()?;
         Some(
             snapshot
@@ -67,15 +60,37 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
     } else {
         None
     };
+    if ["initialize", "ensure_ready", "browser_prepare"].contains(&action.as_str()) {
+        let selected = node.as_ref().ok_or("请先选择并测试节点")?;
+        let timezone = super::runtime::timezone_target(selected)
+            .ok_or("无法确定所选出口的目标时区，请返回第二步重新测试节点")?;
+        input["node"] = serde_json::to_value(selected).map_err(|e| e.to_string())?;
+        input["timezoneTarget"] = serde_json::to_value(timezone).map_err(|e| e.to_string())?;
+    }
+    if action == "initialize" {
+        vault::save("virtual-node-v1.dpapi", &serde_json::to_vec(&super::nodes::virtual_node_config()?).map_err(|e| e.to_string())?)?;
+    }
+    let timeout_seconds = if action == "browser_prepare" { 900 } else { 600 };
     let request = serde_json::json!({"action": action, "config": input, "root": vault::dir()?.join("Virtual"), "node": node});
     let script = format!("$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')) | ConvertFrom-Json\n{}", STANDARD.encode(request.to_string()), controller_script());
     let result: serde_json::Value =
-        windows::run_script_with_timeout(script.as_bytes(), std::time::Duration::from_secs(600))?;
+        windows::run_script_with_timeout(script.as_bytes(), std::time::Duration::from_secs(timeout_seconds))?;
     Ok(result.to_string())
 }
 
 #[cfg(all(test, windows))]
 mod tests {
+    #[test]
+    #[ignore = "Synchronizes the initialized Guest timezone with the selected exit and reads its real browser timezone in an isolated profile"]
+    fn guest_timezone_sync_live() {
+        let ready: serde_json::Value = serde_json::from_str(&super::execute("ensure_ready".into(), "{}".into()).unwrap()).unwrap();
+        assert_eq!(ready["ready"], true, "{ready}");
+        assert_eq!(ready["timezone"], ready["timezoneTarget"]["windowsId"], "{ready}");
+        let script = include_str!("../../../tests/fixtures/browser-timezone-probe.ps1");
+        let observed: serde_json::Value = serde_json::from_str(&super::execute("browser_prepare".into(), serde_json::json!({"script":script}).to_string()).unwrap()).unwrap();
+        assert_eq!(observed["timezone"], ready["timezoneTarget"]["ianaId"], "{observed}");
+        println!("Guest system and browser timezone match selected exit: {observed}");
+    }
     #[test]
     fn assembled_controller_parses_without_running_system_operations() {
         use base64::Engine;
@@ -85,6 +100,30 @@ mod tests {
         let probe = format!("$s = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')); $null = [ScriptBlock]::Create($s); @{{parsed=$true}} | ConvertTo-Json", encoded);
         let result: serde_json::Value = crate::infrastructure::windows::run_script(probe.as_bytes()).unwrap();
         assert_eq!(result["parsed"], true);
+    }
+
+    #[test]
+    #[ignore = "Checks the current user's existing Guest and opens/reuses its VM console"]
+    fn guest_console_ready_live() {
+        let started = std::time::Instant::now();
+        let result: serde_json::Value = serde_json::from_str(
+            &super::execute("ensure_ready".into(), r#"{"openConsole":true}"#.into()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result["ready"], true);
+        assert_eq!(result["consoleOpened"], true);
+        let process_id = result["consoleProcessId"].as_u64().unwrap();
+        // execute() 返回时，其管理的进程作业也已关闭。
+        let probe = format!("@{{alive=($null -ne (Get-Process -Id {process_id} -ErrorAction SilentlyContinue))}} | ConvertTo-Json -Compress");
+        let alive: serde_json::Value =
+            crate::infrastructure::windows::run_script(probe.as_bytes()).unwrap();
+        assert_eq!(alive["alive"], true);
+        assert!(started.elapsed().as_secs() < 180);
+        println!(
+            "{}; elapsed={:?}; console survives controller job",
+            result,
+            started.elapsed()
+        );
     }
 
     #[test]

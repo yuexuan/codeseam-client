@@ -125,3 +125,5 @@ pub async fn restore_legacy(
 
 mod browser;
 pub use browser::*;
+mod workbench;
+pub use workbench::*;

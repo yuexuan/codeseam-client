@@ -6,6 +6,8 @@ fn bindings() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::new().commands(tauri_specta::collect_commands![
         commands::claude_cleanup,
         commands::prepare_browser,
+        commands::browser_action,
+        commands::workbench_operation,
         commands::read_startup,
         commands::scan_environment,
         commands::restore_legacy,

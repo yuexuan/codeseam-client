@@ -13,8 +13,17 @@ if (!$admin) {
     $wrapperPath = $outputPath + '.ps1'
     $wrapped | Set-Content -LiteralPath $wrapperPath -Encoding UTF8
     try {
-        $process = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $wrapperPath + '"')) -Wait -PassThru
-        if ($process.ExitCode -ne 0) { throw (Get-Content -LiteralPath "$outputPath.err" -Raw -ErrorAction SilentlyContinue) }
+        $process = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $wrapperPath + '"')) -PassThru
+        # Start-Process -Wait 会等待全部后代（包括长期打开的 VMConnect）。
+        # 此处只等待提权控制器完成，窗口的生命周期独立于本次操作。
+        $timeoutSeconds = if ($request.action -eq 'browser_prepare') { 840 } else { 540 }
+        if (!$process.WaitForExit($timeoutSeconds * 1000)) { throw ('虚拟机控制操作在 ' + $timeoutSeconds + ' 秒内未完成，请复核实际状态后重试。') }
+        $process.Refresh()
+        if ($process.ExitCode -ne 0) {
+            $detail = Get-Content -LiteralPath "$outputPath.err" -Raw -ErrorAction SilentlyContinue
+            if (![string]::IsNullOrWhiteSpace($detail)) { throw $detail }
+            throw ('虚拟机控制器异常退出，退出码：' + $process.ExitCode + '；操作：' + $request.action)
+        }
         Get-Content -LiteralPath $outputPath -Raw
     } catch {
         if ($_.Exception.NativeErrorCode -eq 1223) {
@@ -105,6 +114,8 @@ try {
         'initialize' {
             $record = Get-Content -LiteralPath $recordPath -Raw | ConvertFrom-Json
             if ($record.phase -ne 'guest') { throw '尚无已创建的候选虚拟机' }
+            if ($record.node.id -ne $request.config.node.id -or $record.node.exitIp -ne $request.config.node.exitIp) { throw '所选节点或出口已变化，请先重新配置 Guest 网络。' }
+            if (!$request.config.timezoneTarget.windowsId -or !$request.config.timezoneTarget.ianaId) { throw '所选出口目标时区未知，请重新测试节点。' }
             $taskName = 'CodeSeam-Initialize-' + $record.vmId
             $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             if ($task -and $task.State -eq 'Running') {
@@ -114,8 +125,14 @@ try {
             $progressPath = Join-Path $root 'guest-progress.json'
             if (Test-Path -LiteralPath $progressPath) {
                 $progress = Get-Content -LiteralPath $progressPath -Raw | ConvertFrom-Json
-                if ($progress.ready -and $progress.desktopSetupVersion -eq 3) { @{ started=$true } | ConvertTo-Json -Compress; return }
+                if ($progress.ready -and $progress.desktopSetupVersion -eq 3) {
+                    # Reusing a ready Guest must still correct/check its current system timezone.
+                    $request.action = 'ensure_ready'
+                    # GUEST_BROWSER
+                }
             }
+            $record | Add-Member -NotePropertyName timezoneTarget -NotePropertyValue $request.config.timezoneTarget -Force
+            Save-Checkpoint $record
             $body = $MyInvocation.MyCommand.ScriptBlock.ToString()
     $body = $body.Substring($body.IndexOf("`$ErrorActionPreference = 'Stop'"))
             $workerRequest = @{ root=$root; action='worker' } | ConvertTo-Json -Compress

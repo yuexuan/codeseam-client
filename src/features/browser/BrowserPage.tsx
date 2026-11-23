@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
   ArrowRight,
@@ -13,7 +13,11 @@ import {
   Info,
   RefreshCw,
 } from 'lucide-react';
-import type { BrowserService } from '../../services/browser';
+import {
+  browserReady,
+  type BrowserResult,
+  type BrowserService,
+} from '../../services/browser';
 import { Surface } from '../../components/ui/Surface';
 import { Button } from '../../components/ui/Button';
 import { BackButton } from '../../components/ui/BackButton';
@@ -24,10 +28,12 @@ export function BrowserPage({
   service,
   virtualRuntime,
   onBack,
+  onContinue,
 }: {
   service: BrowserService;
   virtualRuntime: boolean;
   onBack: () => void;
+  onContinue: (result: BrowserResult) => void;
 }) {
   const [browser, setBrowser] = useState('');
   const result = useQuery({
@@ -35,17 +41,38 @@ export function BrowserPage({
     queryFn: () => service.prepare(virtualRuntime, browser),
     staleTime: 0,
     gcTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
   const p = result.data?.profile;
-  const busy = result.isFetching;
+  const operation = useMutation({
+    mutationFn: (action: 'open' | 'continue') => {
+      if (!p) throw new Error('请先准备专用 Profile');
+      return action === 'open'
+        ? service.inspect(virtualRuntime, p.browserId).then(() => undefined)
+        : service.prepare(virtualRuntime, p.browserId);
+    },
+    onSuccess: (data) => {
+      if (data && browserReady(data.profile)) onContinue(data);
+    },
+  });
+  const busy = result.isFetching || operation.isPending;
+  const ready = browserReady(p) && !result.isError;
+  const blocked = result.isError || operation.isError || (!!p && !ready);
+  const retry = () => {
+    operation.reset();
+    void result.refetch();
+  };
+  const observed = p?.verification?.observed;
   const tasks = [
     {
       icon: Monitor,
-      label: '检测浏览器',
+      label: '检测与升级浏览器',
       value: p
-        ? `${p.browserName} · 已安装`
-        : '检测当前 Runtime 中的 Chrome / Edge',
-      done: !!p,
+        ? `${p.browserName} ${p.version} · ${p.compatibility.updated ? '已升级并复检' : '版本已校验'}`
+        : '校对官方稳定版，版本过旧时自动升级',
+      done: p?.compatibility.status === 'satisfied',
     },
     {
       icon: UserRound,
@@ -68,32 +95,43 @@ export function BrowserPage({
     {
       icon: Network,
       label: '绑定代理出口',
-      value: p ? `${p.nodeName} · 待接通受管代理` : '继承第二步所选节点',
-      done: false,
+      value:
+        p?.proxyStatus === 'satisfied'
+          ? `${p.nodeName} · ${p.verification?.exitIp}`
+          : '继承第二步所选节点并核对实际出口',
+      done: p?.proxyStatus === 'satisfied',
     },
     {
       icon: Puzzle,
       label: '应用浏览器参数',
-      value: '语言、时区、浏览器能力与权限',
-      done: false,
+      value:
+        p?.timezoneStatus === 'satisfied'
+          ? `时区与出口一致 · ${p.targetTimezone}`
+          : '核对浏览器时区与代理出口、语言、能力和权限',
+      done:
+        p?.parametersStatus === 'satisfied' &&
+        p?.timezoneStatus === 'satisfied',
     },
     {
       icon: ExternalLink,
       label: '创建 Claude 快捷方式',
-      value: '等待受管启动入口',
-      done: false,
+      value: p?.shortcutPath ?? '等待受管启动入口',
+      done: p?.shortcutStatus === 'satisfied',
     },
     {
       icon: Globe,
       label: '浏览器网络验证',
-      value: 'DNS / DoH、IPv4 / IPv6、WebRTC / QUIC',
-      done: false,
+      value:
+        p?.verificationStatus === 'satisfied'
+          ? 'HTTPS 出口一致 · WebRTC 无非代理候选 · QUIC 已禁用'
+          : '验证 HTTPS 出口与 WebRTC，限制 DNS / QUIC',
+      done: p?.verificationStatus === 'satisfied',
     },
     {
       icon: FileCheck,
       label: '生成候选基线',
-      value: '等待浏览器级验证结果',
-      done: false,
+      value: p?.baselinePath ?? '等待浏览器级验证结果',
+      done: p?.baselineStatus === 'satisfied',
     },
   ];
   const percent = Math.round(
@@ -106,36 +144,68 @@ export function BrowserPage({
         ['独立 Profile', p?.profileName],
         ['Profile 目录', p?.profilePath],
         ['运行环境', p?.runtime],
+        ['官方稳定版', p?.compatibility.stableVersion],
       ],
     ],
     [
       '环境继承',
       [
-        ['语言', p?.language],
-        ['时区', p?.timezone],
-        ['User-Agent / 分辨率', '待浏览器实时观测'],
+        ['语言', observed?.language ?? p?.language],
+        ['代理目标时区', p?.targetTimezone],
+        ['浏览器实际时区', observed?.timezone ?? p?.timezone],
+        ['User-Agent', observed?.userAgent],
+        [
+          '验证分辨率',
+          observed
+            ? `${observed.width} × ${observed.height}（后台探针）`
+            : undefined,
+        ],
       ],
     ],
     [
       '设备与权限',
       [
-        ['摄像头 / 麦克风', '遵循浏览器权限 · 待观测'],
-        ['位置信息', '遵循浏览器权限 · 待观测'],
+        ['权限检测页面', observed?.origin],
+        [
+          '摄像头 / 麦克风',
+          observed
+            ? `${observed.permissions.camera} / ${observed.permissions.microphone}`
+            : '待观测',
+        ],
+        ['位置信息', observed?.permissions.geolocation ?? '待观测'],
       ],
     ],
     [
       '图形能力',
       [
-        ['Canvas / WebGL', '读取真实能力 · 待观测'],
-        ['AudioContext', '读取真实能力 · 待观测'],
+        [
+          'Canvas / WebGL',
+          observed
+            ? `${observed.canvas ? '可用' : '不可用'} / ${observed.webgl ? '可用' : '不可用'}`
+            : '待观测',
+        ],
+        [
+          'AudioContext',
+          observed
+            ? observed.audioSampleRate
+              ? `${observed.audioSampleRate} Hz`
+              : '不可用'
+            : '待观测',
+        ],
       ],
     ],
     [
       '网络与防护',
       [
         ['当前节点', p?.nodeName],
-        ['代理绑定', '待完成'],
-        ['DNS / DoH、WebRTC', '待浏览器验证'],
+        ['实测出口', p?.verification?.exitIp],
+        ['DNS', p?.verification?.network.dns],
+        [
+          'WebRTC / QUIC',
+          p?.verification
+            ? `${p.verification.network.webrtc} / ${p.verification.network.quic}`
+            : '待浏览器验证',
+        ],
       ],
     ],
   ] as const;
@@ -144,7 +214,7 @@ export function BrowserPage({
       <header className={styles.header}>
         <h1>准备专用浏览器</h1>
         <p>
-          自动为当前 Runtime 创建 Claude 专用 Profile，并完成浏览器环境检测。
+          自动校对并升级浏览器，准备专用 Profile 和快捷方式，再验证实际出口。
         </p>
       </header>
       <div className={styles.columns}>
@@ -182,16 +252,21 @@ export function BrowserPage({
               </div>
             ))}
           </div>
-          {result.isError && (
-            <p role="alert" className={styles.error}>
-              {result.error.message}
-            </p>
-          )}
-          {p && (
+          {!busy &&
+            (result.isError || operation.isError || p?.verificationError) && (
+              <p role="alert" className={styles.error}>
+                {result.error?.message ??
+                  operation.error?.message ??
+                  p?.verificationError}
+              </p>
+            )}
+          {(p || busy) && (
             <p className={styles.note}>
-              Profile
-              已准备。当前版本尚未实现代理绑定、受管快捷方式和浏览器实时验证，因此进度停在
-              38%，无法进入下一步；重新创建 Profile 无法解除此阻塞。
+              {busy
+                ? '正在自动关闭占用专用 Profile 的浏览器并继续初始化，登录数据会保留。校对版本、升级及出口验证可能需数分钟。'
+                : ready
+                  ? '浏览器版本与网络验证已通过。可打开验证页面自行查看 IP 质量；下一步会复验并显示确认摘要；正式基线将在最终确认后保存。'
+                  : '已有 Profile 和登录状态已保留。请处理上方提示后点击重试，继续初始化。'}
             </p>
           )}
         </Surface>
@@ -201,13 +276,9 @@ export function BrowserPage({
               <Monitor size={26} />
               浏览器参数
             </h2>
-            <Button
-              variant="quiet"
-              disabled={busy}
-              onClick={() => void result.refetch()}
-            >
+            <Button variant="quiet" disabled={busy} onClick={retry}>
               <RefreshCw size={17} />
-              {busy ? '准备中…' : '重新创建'}
+              {busy ? '准备中…' : blocked ? '重试' : '重新检测'}
             </Button>
           </div>
           <label className={styles.browser}>
@@ -240,10 +311,16 @@ export function BrowserPage({
             </section>
           ))}
           <div className={styles.verify}>
-            <Button disabled title="受管启动与浏览器实时探针尚未接通">
+            <Button
+              disabled={busy || !ready}
+              onClick={() => operation.mutate('open')}
+            >
               <ExternalLink size={21} />
               打开验证
             </Button>
+            <p className={styles.note}>
+              使用专用浏览器访问 ip.net.coffee/claude/，请自行查看 IP 质量。
+            </p>
           </div>
         </Surface>
       </div>
@@ -253,9 +330,13 @@ export function BrowserPage({
           <Info size={19} />
           专用 Profile 独立保存登录状态，不读取或修改日常浏览器数据。
         </p>
-        <Button variant="primary" disabled>
-          下一步
-          <ArrowRight size={23} />
+        <Button
+          variant="primary"
+          disabled={busy || (!ready && !blocked)}
+          onClick={() => (blocked ? retry() : operation.mutate('continue'))}
+        >
+          {busy ? '处理中…' : blocked ? '重试' : '下一步'}
+          {blocked ? <RefreshCw size={23} /> : <ArrowRight size={23} />}
         </Button>
       </WizardActions>
     </div>
