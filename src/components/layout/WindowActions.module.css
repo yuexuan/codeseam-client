@@ -1,0 +1,21 @@
+.controls {
+  display: flex;
+  align-self: flex-start;
+}
+.controls button {
+  display: grid;
+  place-items: center;
+  width: var(--window-button-width);
+  height: var(--window-button-height);
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text);
+}
+.controls button:hover {
+  background: var(--hover);
+}
+.controls .close:hover {
+  background: var(--danger);
+  color: var(--on-primary);
+}

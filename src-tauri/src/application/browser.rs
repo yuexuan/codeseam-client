@@ -6,11 +6,15 @@ pub fn prepare(virtual_runtime: bool, browser: String) -> Result<String, String>
 }
 
 pub fn execute(virtual_runtime: bool, browser: String, action: String) -> Result<String, String> {
-    if !["prepare", "open", "inspect", "confirm", "install_code", "install_desktop"].contains(&action.as_str()) {
+    if !["prepare", "open", "inspect", "confirm", "install_code", "install_desktop", "verify", "recreate"].contains(&action.as_str()) {
         return Err("未知浏览器操作".into());
     }
     if !["", "edge", "chrome"].contains(&browser.as_str()) {
         return Err("不支持的浏览器".into());
+    }
+    let runtime_locked = super::workbench::load()?.is_some_and(|record| record["reconfiguration"].is_object() || record["nodeRepair"].is_object() || record["virtualRuntime"] != virtual_runtime);
+    if runtime_locked && ["open", "install_code", "install_desktop"].contains(&action.as_str()) {
+        return Err("该运行环境尚未成为正式 Runtime，请完成或取消重新配置后再打开 Claude".into());
     }
     if virtual_runtime {
         let snapshot = super::nodes::read()?;
@@ -23,7 +27,7 @@ pub fn execute(virtual_runtime: bool, browser: String, action: String) -> Result
                     && n.exit_ip.is_some()
             })
             .ok_or("请先选择并测试当前节点")?;
-        return super::virtual_runtime::execute("browser_prepare".into(), serde_json::json!({"browser":browser,"action":action,"script":include_str!("../infrastructure/browser.ps1"),"worker":include_str!("../infrastructure/browser_worker.ps1"),"node":node}).to_string());
+        return super::virtual_runtime::execute("browser_prepare".into(), serde_json::json!({"browser":browser,"action":action,"script":include_str!("../infrastructure/browser.ps1"),"worker":include_str!("../infrastructure/browser_worker.ps1"),"node":node,"runtimeLocked":runtime_locked}).to_string());
     }
     let runtime = super::runtime::read()?;
     if !runtime.confirmed {
@@ -36,7 +40,7 @@ pub fn execute(virtual_runtime: bool, browser: String, action: String) -> Result
     let engine = crate::infrastructure::mihomo::Engine::start(&[config.clone()])?;
     engine.node(0)?;
     drop(engine);
-    let request = serde_json::json!({"root": vault::dir()?.join("Browser").join("native"), "browser": browser, "action":action, "nodeId": runtime.node.id, "nodeName": runtime.node.name, "exitIp":runtime.node.exit_ip,"timezoneTarget":timezone,"nodeConfig":config,"mihomo":vault::dir()?.join("mihomo/mihomo-v1.19.34.exe"),"worker":include_str!("../infrastructure/browser_worker.ps1")});
+    let request = serde_json::json!({"root": vault::dir()?.join("Browser").join("native"), "browser": browser, "action":action, "nodeId": runtime.node.id, "nodeName": runtime.node.name, "exitIp":runtime.node.exit_ip,"timezoneTarget":timezone,"nodeConfig":config,"mihomo":vault::dir()?.join("mihomo/mihomo-v1.19.34.exe"),"worker":include_str!("../infrastructure/browser_worker.ps1"),"runtimeLocked":runtime_locked});
     let script = format!("$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')) | ConvertFrom-Json\n{}", STANDARD.encode(request.to_string()), include_str!("../infrastructure/browser.ps1"));
     let result: serde_json::Value =
         windows::run_script_with_timeout(script.as_bytes(), std::time::Duration::from_secs(720))?;

@@ -41,6 +41,16 @@
 .quiet {
   background: var(--surface);
 }
+.outline {
+  color: var(--brand-strong);
+  border-color: var(--brand);
+  box-shadow: none;
+}
+.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: none;
+}
 .icon {
   width: var(--icon-button);
   height: var(--icon-button-height);

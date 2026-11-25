@@ -7,7 +7,12 @@ body {
   background: var(--app-background);
 }
 button {
-  font-family: inherit;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
 }
 button:focus-visible,
 summary:focus-visible,

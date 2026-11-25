@@ -1,41 +1,33 @@
 :root {
   color-scheme: light;
 
-  --text: #22252b;
-  --secondary: #4e515a;
+  /* 日常工作台：与已确认的暖粉白设计稿对齐。 */
+  --text: #111114;
+  --secondary: #383942;
   --muted: #62646d;
-  --brand: #b87324;
-  --brand-strong: #925615;
+  --brand: #ff710d;
+  --brand-strong: #bc450b;
   --on-primary: #fff;
   --success: #237a30;
   --warning: #a65a08;
   --danger: #ae3932;
-  --surface: rgb(255 255 255 / 60%);
-  --surface-solid: #faf7f4;
+  --surface: rgb(255 255 255 / 18%);
+  --surface-solid: #fcf3f6;
   --surface-hover: rgb(255 255 255 / 85%);
-  --line: rgb(172 153 140 / 27%);
+  --line: rgb(170 153 165 / 25%);
   --line-strong: rgb(130 124 125 / 35%);
-  --separator: rgb(162 146 140 / 10%);
+  --separator: rgb(170 153 165 / 18%);
   --hover: rgb(118 98 80 / 10%);
   --overlay: rgb(35 30 25 / 30%);
   --badge-fill: #ffe7d1;
-  --selected-surface: rgb(255 229 207 / 58%);
+  --selected-surface: #ffdfca;
   --selected-line: rgb(255 255 255 / 90%);
   --connected-surface: #d8efca;
-  --nodes-brand: #ef7900;
-  --nodes-brand-strong: #ad4b00;
-  --nodes-primary-fill: linear-gradient(180deg, #ffa135, #ce6200);
-  --nodes-background:
-    radial-gradient(ellipse at 82% 43%, #ebe4f180, transparent 62%),
-    radial-gradient(ellipse at 15% 75%, #f9e4ea90, transparent 55%),
-    linear-gradient(125deg, #faede7, #f7edf1 52%, #fbe8df);
-  --primary-fill: linear-gradient(180deg, #ec9a43, #b56212);
+  --primary-fill: linear-gradient(180deg, #ff951b, #e75c00);
   --success-fill: linear-gradient(150deg, #7ec845, #19770e);
   --app-background:
-    radial-gradient(ellipse at 2% 25%, #fae9df80, transparent 55%),
-    radial-gradient(ellipse at 97% 85%, #f9e2d880, transparent 65%),
-    linear-gradient(125deg, #f6efed, #f2eff4 50%, #faf0e9);
-  --shadow: 0 2px 7px rgb(65 43 26 / 6%);
+    #fbf1f6;
+  --shadow: 0 1px 2px rgb(95 55 70 / 3%);
   --inset: inset 0 1px 0 rgb(255 255 255 / 90%);
   --blur: 20px;
   --space-1: 0.25rem;
@@ -106,9 +98,6 @@
     --selected-surface: #483323;
     --selected-line: #76543a;
     --connected-surface: #24432b;
-    --nodes-background: #211f1e;
-    --nodes-brand: #dfab70;
-    --nodes-brand-strong: #efbb7e;
     --inset: inset 0 1px 0 rgb(255 255 255 / 8%);
   }
 }
@@ -140,6 +129,5 @@
     --selected-surface: Canvas;
     --selected-line: Highlight;
     --connected-surface: Canvas;
-    --nodes-background: Canvas;
   }
 }

@@ -1,5 +1,14 @@
 # 运行环境真机验证
 
+## 2026-11-25 · 虚拟机窗口恢复与启动页公共组件
+
+- 原有 Open-GuestConsole 找到 MainWindowHandle 后立即返回，最小化窗口仍被报告为已打开。现在新建和复用路径都调用 Show-GuestConsole：恢复最小化窗口、提升窗口顺序并请求前置，确认可见且不处于最小化后再返回；保持现有普通/最大化窗口大小，不重复创建连接。
+- 现场已通过 computer-use 恢复现有 VMConnect，看到 CodeSeam Guest 的 Windows 登录页。显式原生测试 daily_guest_console_reuse_live 连续两次调用生产 open_console 成功，复用 PID 31128，控制器作业退出后窗口进程仍存活。最小化恢复、保留尺寸及失败不报成功由隔离回归覆盖。
+- 启动页移除已不存在的 --workbench-* 变量，改用公共 WindowShell / WizardHeader / Surface / CheckRow / StatusLabel / Button。WindowShell 支持不展示向导步骤的启动场景，窗口控制继续使用公共 WindowActions；状态颜色和尺寸直接使用公共 token。
+- 浏览器复核浅色、深色及 820×560 最小窗口，页面没有横向溢出；节点修复弹窗可打开和返回，startup-retry 演示失败后重试可进入工作台，浏览器 error/warn 日志为空。演示重试不代表真实 Guest 的冷启动验收。
+- 桌面 CodeSeam 窗口的辅助工具前置操作在重新绑定后仍返回 failed to activate captured window，故未声称完成真实按钮点击验收；真实打开与复用以原生调用结果为证据。未操作 Guest 登录。
+- 验证通过：npm run check；npm test（14 项）；cargo test --lib -- --test-threads=1（35 通过，17 个显式在线测试默认跳过）；daily_guest_console_reuse_live 单独真机运行；guest-console、console-window、guest-controller、runtime-startup 回归。窗口恢复回归已接入 verify、CI 和 Release。
+
 ## 2026-11-16 · 初始化自动关闭专用浏览器与阻断重试
 
 - 初始化和确认验证前按完整 user-data-dir 精确定位专用 Profile 的浏览器。先请求正常关闭以落盘，仍存活时结束该 Profile 的后台进程，再等待旧启动器释放 browser.lock 后继续验证。保留 Profile、登录文件及其他 Profile 的浏览器；普通打开/打开验证不触发初始化关闭。

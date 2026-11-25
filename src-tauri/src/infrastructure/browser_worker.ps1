@@ -7,6 +7,68 @@ $socket = $null
 $lease = $null
 $sessionDir = $null
 $outcome = @{ ok=$false; error='浏览器验证未完成' }
+$activePath = Join-Path $root 'active-browser.json'
+function Get-LaunchUrl([string]$Action) {
+    switch ($Action) {
+        'inspect' { 'https://ip.net.coffee/claude/' }
+        'install_code' { 'https://claude.com/product/claude-code' }
+        'install_desktop' { 'https://claude.ai/download' }
+        'open' { 'https://claude.ai/' }
+        default { throw '不支持的浏览器入口' }
+    }
+}
+function Save-LaunchTime {
+    $launchPath = Join-Path $root 'last-launch.json'
+    @{at=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Compress | Set-Content -LiteralPath "$launchPath.tmp" -Encoding UTF8
+    Move-Item -LiteralPath "$launchPath.tmp" -Destination $launchPath -Force
+}
+function Request-BrowserWindow {
+    $active = Get-Content -LiteralPath $activePath -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+    if (!$active -or $active.profileId -ne $manifest.profileId -or $active.nodeId -ne $manifest.nodeId -or $active.session -notmatch '^[0-9a-f]{32}$') {
+        throw '专用浏览器正在使用此配置。请关闭专用浏览器窗口，再打开所选页面。'
+    }
+    $file = Join-Path $root ($active.session + '-' + [guid]::NewGuid().ToString('N') + '.window')
+    try {
+        [IO.File]::WriteAllText("$file.tmp", $Mode)
+        [IO.File]::Move("$file.tmp", $file)
+        $deadline = [DateTime]::UtcNow.AddSeconds(6)
+        do {
+            if (Test-Path -LiteralPath "$file.opened") {
+                return @{ok=$true;browserProcessId=$active.browserProcessId}
+            }
+            Start-Sleep -Milliseconds 100
+        } while ([DateTime]::UtcNow -lt $deadline)
+        throw '已打开的专用浏览器未能响应，请关闭该窗口后重试。'
+    } finally { Remove-Item -LiteralPath $file,"$file.tmp","$file.opened" -ErrorAction SilentlyContinue }
+}
+function Wait-BrowserWindows {
+    $session = [guid]::NewGuid().ToString('N')
+    $active = @{session=$session;profileId=$manifest.profileId;nodeId=$manifest.nodeId;browserProcessId=$browserProcess.Id}
+    $active | ConvertTo-Json -Compress | Set-Content -LiteralPath "$activePath.tmp" -Encoding UTF8
+    Move-Item -LiteralPath "$activePath.tmp" -Destination $activePath -Force
+    try {
+        if ($ResultPath) {
+            @{ok=$true;browserProcessId=$browserProcess.Id} | ConvertTo-Json -Compress | Set-Content -LiteralPath "$ResultPath.tmp" -Encoding UTF8
+            Move-Item -LiteralPath "$ResultPath.tmp" -Destination $ResultPath -Force
+        }
+        while (!$browserProcess.WaitForExit(300)) {
+            foreach ($file in [IO.Directory]::GetFiles($root, "$session-*.window")) {
+                try {
+                    $requestedMode = [IO.File]::ReadAllText($file)
+                    $url = Get-LaunchUrl $requestedMode
+                    $next = Start-Process -FilePath $manifest.executable -ArgumentList ($arguments + @('--new-window',$url)) -WindowStyle Normal -PassThru
+                    if (!$next.WaitForExit(700) -and $browserProcess.HasExited) {
+                        $browserProcess = $next
+                    } elseif ($next.HasExited -and $next.ExitCode -ne 0) { continue }
+                    if ($requestedMode -eq 'open') { Save-LaunchTime }
+                    [IO.File]::Move($file, "$file.opened")
+                } catch {
+                    # 派发期间，请求方可能超时，浏览器窗口也可能关闭。
+                } finally { Remove-Item -LiteralPath $file -ErrorAction SilentlyContinue }
+            }
+        }
+    } finally { Remove-Item -LiteralPath $activePath -ErrorAction SilentlyContinue }
+}
 function Read-LocalJson([string]$Uri) {
     $http = [Net.HttpWebRequest]::Create($Uri)
     $http.Proxy = $null
@@ -43,6 +105,7 @@ function Invoke-Cdp([string]$Method, $Parameters = @{}, [int]$TimeoutSeconds = 2
 }
 try {
     $manifest = Get-Content -LiteralPath (Join-Path $root 'managed-profile.json') -Raw | ConvertFrom-Json
+    if ($manifest.runtimeLocked -eq $true -and $Mode -in @('open','install_code','install_desktop')) { throw '运行环境正在重新配置或已转为历史环境，请从 CodeSeam 确认当前正式 Runtime。' }
     if ($Mode -ne 'verify' -and $manifest.verificationStatus -ne 'satisfied') { throw '请先在 CodeSeam 中完成当前专用浏览器验证。' }
     $installedVersion = [version](Get-Item -LiteralPath $manifest.executable).VersionInfo.ProductVersion
     if (!$manifest.compatibility -or $manifest.compatibility.status -ne 'satisfied' -or $installedVersion.Major -lt $manifest.compatibility.minimumMajor) { throw '浏览器版本尚未通过校验，请在 CodeSeam 中重新检测并完成升级。' }
@@ -50,7 +113,16 @@ try {
     if (!$manifest.targetWindowsTimezone -or !$manifest.targetTimezone -or (Get-TimeZone).Id -ne $manifest.targetWindowsTimezone) { throw '系统时区与所选代理出口不一致，请在 CodeSeam 中重新同步运行环境并检测浏览器。' }
     if ($Mode -ne 'verify' -and $manifest.timezoneStatus -ne 'satisfied') { throw '浏览器时区尚未通过验证，请关闭专用浏览器后重新检测。' }
     try { $lease = [IO.File]::Open((Join-Path $root 'browser.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
-    catch { throw '专用浏览器占用尚未释放，请点击重试以继续验证。' }
+    catch [IO.IOException] {
+        if (($_.Exception.GetBaseException().HResult -band 0xffff) -ne 32) { throw }
+        if ($Mode -eq 'verify') { $outcome = @{ok=$false;busy=$true;error='专用浏览器正在使用此配置，请关闭窗口后运行验证。'}; return }
+        $outcome = Request-BrowserWindow
+        if ($ResultPath) {
+            $outcome | ConvertTo-Json -Compress | Set-Content -LiteralPath "$ResultPath.tmp" -Encoding UTF8
+            Move-Item -LiteralPath "$ResultPath.tmp" -Destination $ResultPath -Force
+        }
+        return
+    }
     $running = @(Get-CimInstance Win32_Process -Filter "Name='msedge.exe' OR Name='chrome.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('--user-data-dir="' + $manifest.profilePath + '"') })
     if ($running.Count) { throw '专用浏览器重新占用了 Profile，请点击重试以自动关闭并继续验证。' }
     # 仅在应用关闭时修改本应用的配置文件，并保留其他所有首选项。
@@ -98,20 +170,12 @@ try {
         $arguments += '--no-proxy-server'
     }
     if ($Mode -ne 'verify') {
-        $url = switch ($Mode) {
-            'inspect' { 'https://ip.net.coffee/claude/' }
-            'install_code' { 'https://claude.com/product/claude-code' }
-            'install_desktop' { 'https://claude.ai/download' }
-            default { 'https://claude.ai/' }
-        }
+        $url = Get-LaunchUrl $Mode
         $browserProcess = Start-Process -FilePath $manifest.executable -ArgumentList ($arguments + @('--window-position=100,100','--new-window',$url)) -WindowStyle Normal -PassThru
         Start-Sleep -Milliseconds 700
         if ($browserProcess.HasExited -and $browserProcess.ExitCode -ne 0) { throw '专用浏览器启动失败' }
-        if ($ResultPath) {
-            @{ok=$true;browserProcessId=$browserProcess.Id} | ConvertTo-Json -Compress | Set-Content -LiteralPath ($ResultPath + '.tmp') -Encoding UTF8
-            Move-Item -LiteralPath ($ResultPath + '.tmp') -Destination $ResultPath -Force
-        }
-        $browserProcess.WaitForExit()
+        if ($Mode -eq 'open') { Save-LaunchTime }
+        Wait-BrowserWindows
         $outcome = @{ok=$true}
     } else {
         $portFile = Join-Path $manifest.profilePath 'DevToolsActivePort'
@@ -156,7 +220,7 @@ try {
         $expression = @'
 (async () => {
   const permissions = {};
-  for (const name of ['camera','microphone','geolocation']) {
+  for (const name of ['camera','microphone','geolocation','notifications']) {
     try { permissions[name] = (await navigator.permissions.query({name})).state; }
     catch { permissions[name] = 'unsupported'; }
   }
@@ -173,7 +237,10 @@ try {
     try { pc.createDataChannel('probe'); await pc.setLocalDescription(await pc.createOffer()); }
     catch { finish(false); }
   });
-  return {origin:location.origin, userAgent:navigator.userAgent, language:navigator.language, languages:navigator.languages,
+  const offset = -new Date().getTimezoneOffset();
+  return {origin:location.origin, userAgent:navigator.userAgent, language:navigator.language, languages:navigator.languages, platform:navigator.platform,
+    hardwareConcurrency:navigator.hardwareConcurrency, deviceMemory:navigator.deviceMemory, webgpu:!!navigator.gpu, devicePixelRatio:window.devicePixelRatio,
+    utcOffset:'UTC'+(offset>=0?'+':'-')+String(Math.floor(Math.abs(offset)/60)).padStart(2,'0')+':'+String(Math.abs(offset)%60).padStart(2,'0'),
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone, width:screen.width, height:screen.height,
     canvas:!!document.createElement('canvas').getContext('2d'), webgl:!!gl,
     webglRenderer:gl ? gl.getParameter(gl.RENDERER) : null, audioSampleRate:audio, permissions, rtc};

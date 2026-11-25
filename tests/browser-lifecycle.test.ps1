@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Join-Path $env:TEMP ('codeseam-browser-lifecycle-' + [guid]::NewGuid().ToString('N'))
 $body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'))
 # 生命周期测试不会访问发行服务，也不会在测试机器上安装软件。
@@ -25,7 +25,7 @@ function Start-ScheduledTask {
     $script:launches++
     if ($script:taskArguments -notmatch '-ResultPath "([^"]+)"') { throw 'Missing unique result path' }
     $path = $Matches[1]
-    $result = if ($script:failure) { @{ok=$false;error='fixture verification failed'} } else {
+    $result = if ($script:busy) { @{ok=$false;busy=$true} } elseif ($script:failure) { @{ok=$false;error='fixture verification failed'} } else {
         @{ok=$true;exitIp='203.0.113.10';measuredAt='fixture';observed=@{language='en-US';timezone=$script:observedTimezone};network=@{dns='fixture'}}
     }
     $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding UTF8
@@ -60,6 +60,13 @@ if (!$opened.opened -or $script:stops -ne 3 -or $script:removals -ne 4) { throw 
 $request.action = 'inspect'
 $inspected = & ([scriptblock]::Create($body)) | ConvertFrom-Json
 if (!$inspected.opened -or $script:taskArguments -notmatch '-Mode inspect' -or $script:stops -ne 3 -or $script:removals -ne 5) { throw 'IP inspection must use a persistent managed browser in inspect mode' }
+$request.action = 'verify'
+$script:busy = $true
+$beforeBusy = [IO.File]::ReadAllText($manifestPath)
+$busyResult = & ([scriptblock]::Create($body)) | ConvertFrom-Json
+if (!$busyResult.busy -or $busyResult.verified -or [IO.File]::ReadAllText($manifestPath) -ne $beforeBusy) { throw 'An occupied browser must keep its last verification and remain usable' }
+$script:busy = $false
+$request.action = 'inspect'
 $request.nodeId = 'different-node'
 try { $null = & ([scriptblock]::Create($body)); throw 'Accepted stale node' } catch { if ($_.Exception.Message -eq 'Accepted stale node') { throw } }
 $request.nodeId = 'fixture'

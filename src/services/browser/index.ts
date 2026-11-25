@@ -20,6 +20,7 @@ export interface BrowserResult {
       checkedAt: string;
     };
     runtime: string;
+    nodeId?: string;
     nodeName: string;
     language: string;
     timezone: string;
@@ -41,6 +42,14 @@ export interface BrowserResult {
       observed: {
         origin: string;
         userAgent: string;
+        platform?: string;
+        languages?: string[];
+        devicePixelRatio?: number;
+        utcOffset?: string;
+        hardwareConcurrency?: number;
+        deviceMemory?: number;
+        webglRenderer?: string;
+        webgpu?: boolean;
         language: string;
         timezone: string;
         width: number;
@@ -193,6 +202,15 @@ export function createBrowserPreview(scenario: string): BrowserService {
         ],
         reused,
       };
+      if (scenario === 'runtime') {
+        result.profile.nodeName = 'SG-01 · 新加坡';
+        result.profile.timezone = 'Singapore Standard Time';
+        result.profile.targetTimezone = 'Asia/Singapore';
+        if (result.profile.verification) {
+          result.profile.verification.exitIp = '103.163.220.47';
+          result.profile.verification.observed.timezone = 'Asia/Singapore';
+        }
+      }
       reused = true;
       return result;
     },

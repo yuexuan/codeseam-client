@@ -1,0 +1,44 @@
+.row,
+.compact {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 0.8fr) minmax(0, 1.2fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 3rem;
+  padding-block: var(--space-2);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+
+.compact {
+  min-height: var(--row-height);
+}
+
+.row + .row,
+.compact + .compact {
+  border-top: 1px solid var(--separator);
+}
+
+.icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--brand);
+}
+
+.value {
+  min-width: 0;
+  color: var(--secondary);
+}
+@media (width <= 700px) {
+  .descriptionBelow {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  }
+  .descriptionBelow .value {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+  .descriptionBelow > span:last-child {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}

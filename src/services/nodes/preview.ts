@@ -14,6 +14,28 @@ const examples: NodeSummary[] = [
     error: null,
   },
   {
+    id: 'sg-backup-1',
+    name: 'SG Backup 01',
+    protocol: 'vless',
+    region: '新加坡',
+    countryCode: 'sg',
+    latency: 82,
+    exitIp: '192.0.2.82',
+    status: 'connected',
+    error: null,
+  },
+  {
+    id: 'sg-backup-2',
+    name: 'SG Backup 02',
+    protocol: 'vmess',
+    region: '新加坡',
+    countryCode: 'sg',
+    latency: 95,
+    exitIp: '192.0.2.96',
+    status: 'connected',
+    error: null,
+  },
+  {
     id: 'hk',
     name: 'HK Transit 01',
     protocol: 'trojan',
@@ -50,6 +72,15 @@ const examples: NodeSummary[] = [
 export function createNodesPreview(scenario: string): NodesService {
   let nodes = scenario === 'empty' ? [] : structuredClone(examples);
   let selectedId: string | null = scenario === 'empty' ? null : 'sg';
+  if (['node-failure', 'node-repair-error'].includes(scenario) && nodes[0]) {
+    Object.assign(nodes[0], {
+      status: 'failed',
+      exitIp: null,
+      latency: null,
+      region: null,
+      error: '当前节点连接超时，请切换节点。',
+    });
+  }
   const wait = () => new Promise((resolve) => setTimeout(resolve, 500));
   const add = (name: string, protocol: string) => {
     nodes.push({
@@ -66,7 +97,7 @@ export function createNodesPreview(scenario: string): NodesService {
   };
   const identities = new Set<string>();
   const listeners = new Set<(snapshot: NodeSnapshot) => void>();
-  let running = false;
+  let running = scenario !== 'service-failure';
   const snapshot = (): NodeSnapshot => ({
     nodes: structuredClone(nodes),
     selectedId,
@@ -80,14 +111,7 @@ export function createNodesPreview(scenario: string): NodesService {
         listeners.delete(listener);
       };
     },
-    read: async (): Promise<NodeSnapshot> => ({
-      nodes: structuredClone(nodes),
-      selectedId,
-      runtime: {
-        running: scenario !== 'service-failure',
-        version: scenario === 'service-failure' ? null : 'v1.19.3',
-      },
-    }),
+    read: async (): Promise<NodeSnapshot> => snapshot(),
     importLinks: async (links) => {
       await wait();
       if (!links) throw new Error('请粘贴订阅链接或节点链接');
@@ -150,15 +174,19 @@ export function createNodesPreview(scenario: string): NodesService {
     test: async (ids) => {
       if (scenario === 'service-failure') throw new Error('代理服务暂不可用');
       running = true;
-      nodes = nodes.map((node) => ({
-        ...node,
-        status: 'queued',
-        latency: null,
-        region: null,
-        countryCode: null,
-        exitIp: null,
-        error: null,
-      }));
+      nodes = nodes.map((node) =>
+        ids.includes(node.id)
+          ? {
+              ...node,
+              status: 'queued',
+              latency: null,
+              region: null,
+              countryCode: null,
+              exitIp: null,
+              error: null,
+            }
+          : node,
+      );
       publish();
       for (let start = 0; start < ids.length; start += 8) {
         const batch = ids.slice(start, start + 8);
@@ -173,7 +201,7 @@ export function createNodesPreview(scenario: string): NodesService {
           const example = examples.find((item) => item.id === node.id);
           Object.assign(node, {
             latency: failed ? null : (example?.latency ?? 380),
-            exitIp: failed ? null : '192.0.2.1',
+            exitIp: failed ? null : (example?.exitIp ?? '192.0.2.1'),
             region: failed ? null : (example?.region ?? '日本'),
             countryCode: failed ? null : (example?.countryCode ?? 'jp'),
             status: failed ? 'failed' : 'connected',
@@ -182,7 +210,7 @@ export function createNodesPreview(scenario: string): NodesService {
         });
         publish();
       }
-      running = false;
+      running = true;
       publish();
     },
   };

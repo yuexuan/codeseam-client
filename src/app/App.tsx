@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { WindowShell } from '../components/layout/WindowShell';
-import { BackButton } from '../components/ui/BackButton';
+import { BackButton } from '../components/layout/BackButton';
 import { Button } from '../components/ui/Button';
 import { nativeWindow, previewWindow } from '../core/platform/window';
 import {
@@ -23,6 +23,12 @@ import styles from './App.module.css';
 import { RuntimePage } from '../features/runtime/RuntimePage';
 import { VirtualPage } from '../features/runtime/VirtualPage';
 import { nativeRuntime } from '../services/runtime';
+import { createRuntimePreview } from '../services/runtime/preview';
+import {
+  nativeRuntimeEnvironment,
+  createRuntimeEnvironmentPreview,
+} from '../services/runtime/environment';
+import { RuntimeReconfiguration } from './RuntimeReconfiguration';
 import { ClaudePage } from '../features/claude/ClaudePage';
 import { nativeClaude, createClaudePreview } from '../services/claude';
 import { BrowserPage } from '../features/browser/BrowserPage';
@@ -32,13 +38,19 @@ import {
   type BrowserResult,
 } from '../services/browser';
 import { CompletionPage } from '../features/browser/CompletionPage';
-import { WorkbenchPage } from '../features/workbench/WorkbenchPage';
+import { DailyWorkspace } from './DailyWorkspace';
+import { WorkspaceStartup } from './WorkspaceStartup';
+import {
+  nativeDailyBrowser,
+  createDailyBrowserPreview,
+} from '../services/browser/daily';
 import {
   createWorkbenchPreview,
   nativeWorkbench,
   type WorkbenchRecord,
+  type WorkbenchService,
 } from '../services/workbench';
-const workbench =
+const workbench: WorkbenchService =
   import.meta.env.DEV &&
   !('__TAURI_INTERNALS__' in window) &&
   new URLSearchParams(location.search).has('preview')
@@ -47,6 +59,10 @@ const workbench =
         new URLSearchParams(location.search).get('step') === 'workbench'
           ? new URLSearchParams(location.search).has('virtual')
           : undefined,
+        {
+          environment: () => environment.read(),
+          browser: () => dailyBrowser.read(),
+        },
       )
     : nativeWorkbench;
 const native = '__TAURI_INTERNALS__' in window;
@@ -62,7 +78,18 @@ const claude = preview
 const browser = preview
   ? createBrowserPreview(scenario ?? 'default')
   : nativeBrowser;
+const environment = preview
+  ? createRuntimeEnvironmentPreview(
+      () => workbench.read(),
+      scenario ?? 'default',
+      nodes,
+    )
+  : nativeRuntimeEnvironment;
+const reconfigurationRuntime = preview ? createRuntimePreview() : nativeRuntime;
 const controls = native ? nativeWindow : previewWindow;
+const dailyBrowser = preview
+  ? createDailyBrowserPreview(() => workbench.read(), scenario ?? 'default')
+  : nativeDailyBrowser;
 const createClient = () =>
   new QueryClient({
     defaultOptions: {
@@ -76,8 +103,10 @@ const createClient = () =>
       mutations: { networkMode: 'always', retry: false },
     },
   });
-function Content() {
+function Content({ onReset }: { onReset: () => void }) {
+  const [ready, setReady] = useState<WorkbenchRecord>();
   const [finished, setFinished] = useState<WorkbenchRecord>();
+  const [switchRecord, setSwitchRecord] = useState<WorkbenchRecord>();
   const saved = useQuery({
     queryKey: ['workbench'],
     queryFn: () => workbench.read(),
@@ -134,13 +163,60 @@ function Content() {
       </div>
     );
   const daily = finished ?? saved.data;
-  if (daily)
+  const candidate =
+    switchRecord ?? (daily?.reconfiguration ? daily : undefined);
+  if (candidate)
     return (
-      <WorkbenchPage
-        initial={daily}
+      <RuntimeReconfiguration
+        record={candidate}
+        runtime={reconfigurationRuntime}
+        environment={environment}
+        browser={browser}
+        workbench={workbench}
+        claude={claude}
+        controls={controls}
+        preview={preview}
+        onComplete={(record) => {
+          setReady(undefined);
+          setFinished(record);
+          setSwitchRecord(undefined);
+        }}
+      />
+    );
+  if (daily)
+    if (!ready || ready.confirmedAt !== daily.confirmedAt)
+      return (
+        <WorkspaceStartup
+          record={daily}
+          environment={environment}
+          workbench={workbench}
+          controls={controls}
+          preview={preview}
+          onReady={setReady}
+          nodes={nodes}
+          onRepaired={(record) => {
+            setFinished(record);
+            setReady(undefined);
+          }}
+        />
+      );
+  if (daily && ready)
+    return (
+      <DailyWorkspace
+        key={`${ready.confirmedAt}:${ready.baselineVersion ?? 1}`}
+        browser={dailyBrowser}
+        onReset={onReset}
+        initial={ready}
         service={workbench}
         window={controls}
         preview={preview}
+        environment={environment}
+        onReconfigure={setSwitchRecord}
+        nodes={nodes}
+        onRepaired={(record) => {
+          setFinished(record);
+          setReady(record);
+        }}
       />
     );
 
@@ -243,6 +319,7 @@ function Content() {
 }
 export function App() {
   const [client] = useState(createClient);
+  const [epoch, setEpoch] = useState(0);
   if (!native && !preview)
     return (
       <div className={styles.unsupported}>
@@ -255,7 +332,13 @@ export function App() {
     );
   return (
     <QueryClientProvider client={client}>
-      <Content />
+      <Content
+        key={epoch}
+        onReset={() => {
+          client.clear();
+          setEpoch((value) => value + 1);
+        }}
+      />
     </QueryClientProvider>
   );
 }

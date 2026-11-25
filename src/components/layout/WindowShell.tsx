@@ -1,6 +1,7 @@
+import { WindowActions } from './WindowActions';
 import { WizardFooterContext } from './WizardActions';
 import { useState, type ReactNode } from 'react';
-import { Check, Minus, Square, X } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { WindowControls } from '../../core/platform/window';
 import logo from '../../assets/codeseam-logo.svg';
 import styles from './WindowShell.module.css';
@@ -19,13 +20,15 @@ export function WindowShell({
   preview,
   step = 0,
   virtualRuntime = false,
+  contentClassName = '',
 }: {
   children: ReactNode;
   footer: ReactNode;
   window: WindowControls;
   preview: boolean;
-  step?: number;
+  step?: number | null;
   virtualRuntime?: boolean;
+  contentClassName?: string;
 }) {
   const [error, setError] = useState('');
   const visibleSteps = steps;
@@ -36,52 +39,41 @@ export function WindowShell({
   };
   return (
     <div
-      className={`${styles.shell} ${step === 1 || step === 2 || step === 3 || step === 5 ? styles.nodesShell : ''} ${virtualRuntime ? styles.virtualShell : ''}`}
+      className={`${styles.shell} ${step === null ? styles.simpleShell : ''} ${step === 1 || step === 2 || step === 3 || step === 5 ? styles.nodesShell : ''} ${virtualRuntime ? styles.virtualShell : ''}`}
     >
       <header className={styles.titlebar} data-tauri-drag-region>
         <img src={logo} alt="CodeSeam" draggable={false} />
-        <div className={styles.controls}>
-          <button aria-label="最小化" onClick={() => act(window.minimize)}>
-            <Minus size={18} />
-          </button>
-          <button
-            aria-label="最大化或还原"
-            onClick={() => act(window.maximize)}
-          >
-            <Square size={15} />
-          </button>
-          <button
-            aria-label="关闭"
-            className={styles.close}
-            onClick={() => act(window.close)}
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <WindowActions
+          onMinimize={() => act(window.minimize)}
+          onMaximize={() => act(window.maximize)}
+          onClose={() => act(window.close)}
+        />
       </header>
-      <nav aria-label="初始化步骤" className={styles.steps}>
-        <ol>
-          {visibleSteps.map((label, index) => (
-            <li
-              key={label}
-              aria-current={index === visibleStep ? 'step' : undefined}
-            >
-              <span
-                className={`${styles.number} ${index < visibleStep ? styles.done : ''}`}
+      {visibleStep !== null && (
+        <nav aria-label="初始化步骤" className={styles.steps}>
+          <ol>
+            {visibleSteps.map((label, index) => (
+              <li
+                key={label}
+                aria-current={index === visibleStep ? 'step' : undefined}
               >
-                {index < visibleStep ? (
-                  <Check size={21} aria-label="已完成" />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span>{label}</span>
-            </li>
-          ))}
-        </ol>
-      </nav>
+                <span
+                  className={`${styles.number} ${index < visibleStep ? styles.done : ''}`}
+                >
+                  {index < visibleStep ? (
+                    <Check size={21} aria-label="已完成" />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span>{label}</span>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
       <main
-        className={`${styles.content} ${step === 1 ? styles.nodesContent : ''}`}
+        className={`${styles.content} ${step === 1 ? styles.nodesContent : ''} ${contentClassName}`}
       >
         {preview && <p className={styles.preview}>开发预览 · 数据为演示场景</p>}
         {error && (

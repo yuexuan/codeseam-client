@@ -156,15 +156,19 @@ if ($request.action -eq 'prepare' -and $canReuse) {
     @{profile=$prior; available=@($available); reused=$true} | ConvertTo-Json -Depth 18 -Compress
     return
 }
-if ($request.action -notin @('open', 'inspect', 'install_code', 'install_desktop')) { Close-ManagedBrowser $profile $root }
-$compatibility = Ensure-BrowserVersion $selected $root
+if ($request.action -notin @('open', 'inspect', 'install_code', 'install_desktop', 'verify')) { Close-ManagedBrowser $profile $root }
+$compatibility = if ($request.action -eq 'verify') { $prior.compatibility } else { Ensure-BrowserVersion $selected $root }
+if ($request.action -eq 'verify' -and (!$prior -or $selected.version -ne $prior.version)) { throw '浏览器安装或版本已变化，请先重新创建受管配置。' }
 $selected.version = $compatibility.version
 # 每种浏览器使用独立的数据目录，不能用 Chrome 打开 Edge 配置文件。
 $reused = Test-Path -LiteralPath $profile -PathType Container
-New-Item -ItemType Directory -Path $profile -Force | Out-Null
+if ($request.action -eq 'verify') {
+    if (!(Test-Path -LiteralPath $profile -PathType Container)) { throw '专用 Profile 不存在，请先重新创建。' }
+} else { New-Item -ItemType Directory -Path $profile -Force | Out-Null }
 $runtime = if ($request.runtime) { [string]$request.runtime } else { 'Native' }
 $runtimeId = if ($request.runtimeId) { [string]$request.runtimeId } else { 'native' }
 $manifest = [ordered]@{ schema = 1; profileId = ($runtimeId + '-' + $selected.id); profileName = 'Claude (CodeSeam)'; profilePath = $profile; browserId = $selected.id; browserName = $selected.name; executable = $selected.path; version = $selected.version; runtime = $runtime; runtimeId = $runtimeId; nodeId = $request.nodeId; nodeName = $request.nodeName; expectedExitIp = $request.exitIp; createdAt = $(if ($prior -and $prior.browserId -eq $selected.id) { $prior.createdAt } else { [DateTime]::UtcNow.ToString('o') }); language = (Get-Culture).Name; timezone = (Get-TimeZone).Id; proxyStatus = 'pending'; parametersStatus = 'pending'; shortcutStatus = 'pending'; verificationStatus = 'pending'; baselineStatus = 'pending'; mihomo=$request.mihomo }
+$manifest.runtimeLocked = $request.runtimeLocked -eq $true
 $manifest.compatibility = $compatibility
 $manifest.targetTimezone = [string]$target.ianaId
 $manifest.targetWindowsTimezone = [string]$target.windowsId
@@ -215,6 +219,28 @@ function Start-BrowserTask([string]$Mode, [string]$OutputPath) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
+if ($request.action -eq 'verify') {
+    if ($prior.nodeId -ne $request.nodeId -or $prior.targetTimezone -ne $target.ianaId -or $prior.expectedExitIp -ne $request.exitIp) { throw '节点或目标环境已变化，请先重新创建受管配置。' }
+    $manifest = $prior
+    if ($request.worker) { [IO.File]::WriteAllText((Join-Path $root 'launcher.ps1'), [string]$request.worker, [Text.UTF8Encoding]::new($true)) }
+    $outputPath = Join-Path $root ('verify-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $verification = Start-BrowserTask 'verify' $outputPath
+        if ($verification.busy) { @{verified=$false;busy=$true} | ConvertTo-Json -Compress; return }
+        if (!$verification.ok) { throw $verification.error }
+        $manifest | Add-Member -NotePropertyName verification -NotePropertyValue $verification -Force
+        $manifest | Add-Member -NotePropertyName verificationError -NotePropertyValue $null -Force
+        $manifest.verificationStatus = 'satisfied'
+        Save-Profile
+    } catch {
+        $manifest.verificationStatus = 'pending'
+        $manifest | Add-Member -NotePropertyName verificationError -NotePropertyValue $_.Exception.Message -Force
+        Save-Profile
+        throw
+    } finally { Remove-Item -LiteralPath $outputPath -ErrorAction SilentlyContinue }
+    @{verified=$true;verification=$verification} | ConvertTo-Json -Depth 18 -Compress
+    return
+}
 if ($request.action -in @('open', 'inspect', 'install_code', 'install_desktop')) {
     if (!$prior -or $prior.verificationStatus -ne 'satisfied' -or $prior.nodeId -ne $request.nodeId -or $prior.browserId -ne $selected.id) { throw '请先完成当前节点的专用浏览器验证。' }
     if (!$prior.compatibility -or $prior.version -ne $selected.version -or $prior.compatibility.minimumMajor -ne $compatibility.minimumMajor) { throw '浏览器版本已变化，请重新检测并验证后再打开。' }
@@ -241,6 +267,9 @@ if ($request.worker) {
         $shortcutPath = Join-Path $desktop 'Claude (CodeSeam).lnk'
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
+        $managedArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $root 'launcher.ps1') + '" -Mode open'
+        $managedTarget = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if ((Test-Path -LiteralPath $shortcutPath) -and ($shortcut.TargetPath -ne $managedTarget -or $shortcut.Arguments -ne $managedArguments)) { throw '同名快捷方式不属于当前 CodeSeam Profile，已保留，请先移开后重试。' }
         $shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
         $shortcut.Arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $root 'launcher.ps1') + '" -Mode open'
         $shortcut.WorkingDirectory = $root

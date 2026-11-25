@@ -1,3 +1,5 @@
+import { Select } from '../../components/ui/Select';
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
@@ -20,9 +22,9 @@ import {
 } from '../../services/browser';
 import { Surface } from '../../components/ui/Surface';
 import { Button } from '../../components/ui/Button';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { WizardActions } from '../../components/layout/WizardActions';
-import { StatusLabel } from '../../components/ui/StatusLabel';
+import { CheckRow } from '../../components/business/CheckRow';
 import styles from './BrowserPage.module.css';
 export function BrowserPage({
   service,
@@ -211,12 +213,16 @@ export function BrowserPage({
   ] as const;
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1>准备专用浏览器</h1>
-        <p>
-          自动校对并升级浏览器，准备专用 Profile 和快捷方式，再验证实际出口。
-        </p>
-      </header>
+      <WizardHeader
+        title="准备专用浏览器"
+        description={
+          <>
+            {' '}
+            自动校对并升级浏览器，准备专用 Profile
+            和快捷方式，再验证实际出口。{' '}
+          </>
+        }
+      />
       <div className={styles.columns}>
         <Surface className={styles.tasks}>
           <div className={styles.progress}>
@@ -225,31 +231,30 @@ export function BrowserPage({
           </div>
           <div aria-live="polite">
             {tasks.map(({ icon: Icon, label, value, done }, index) => (
-              <div className={styles.task} key={label}>
-                <Icon className={styles.icon} size={27} />
-                <strong>{label}</strong>
-                <span className={styles.value}>{value}</span>
-                <StatusLabel
-                  status={
-                    done
-                      ? 'satisfied'
-                      : busy && index === 0
-                        ? 'scanning'
-                        : 'pending'
-                  }
-                  label={
-                    done
-                      ? '完成'
-                      : busy && index === 0
-                        ? virtualRuntime
-                          ? '启动 / 检测中'
-                          : '检测中'
-                        : index >= 6
-                          ? '待验证'
-                          : '待完成'
-                  }
-                />
-              </div>
+              <CheckRow
+                key={label}
+                icon={Icon}
+                label={label}
+                value={value}
+                status={
+                  done
+                    ? 'satisfied'
+                    : busy && index === 0
+                      ? 'scanning'
+                      : 'pending'
+                }
+                statusLabel={
+                  done
+                    ? '完成'
+                    : busy && index === 0
+                      ? virtualRuntime
+                        ? '启动 / 检测中'
+                        : '检测中'
+                      : index >= 6
+                        ? '待验证'
+                        : '待完成'
+                }
+              />
             ))}
           </div>
           {!busy &&
@@ -283,7 +288,7 @@ export function BrowserPage({
           </div>
           <label className={styles.browser}>
             浏览器
-            <select
+            <Select
               aria-label="选择浏览器"
               value={p?.browserId ?? browser}
               disabled={busy || !p}
@@ -295,7 +300,7 @@ export function BrowserPage({
                   {b.name} {b.version}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {groups.map(([name, rows]) => (
             <section className={styles.group} key={name}>

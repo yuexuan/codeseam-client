@@ -1,3 +1,4 @@
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
@@ -12,11 +13,11 @@ import {
   CircuitBoard,
 } from 'lucide-react';
 import type { RuntimeService } from '../../services/runtime';
-import { DetectionSummary } from '../../components/ui/DetectionSummary';
-import { StatusLabel } from '../../components/ui/StatusLabel';
+import { DetectionSummary } from '../../components/business/DetectionSummary';
+import { StatusLabel } from '../../components/business/StatusLabel';
 import { Surface } from '../../components/ui/Surface';
 import { Button } from '../../components/ui/Button';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { WizardActions } from '../../components/layout/WizardActions';
 import styles from './HyperVPage.module.css';
 
@@ -67,12 +68,12 @@ export function HyperVPage({
   const unsupported = checks?.some((c) => c.status === 'unsupported');
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <h1>Hyper-V 兼容性检查</h1>
-          <p>检查当前电脑是否满足创建独立 Windows 运行环境的条件。</p>
-        </div>
-      </header>
+      <WizardHeader
+        title="Hyper-V 兼容性检查"
+        description={
+          <> 检查当前电脑是否满足创建独立 Windows 运行环境的条件。 </>
+        }
+      />
       <DetectionSummary
         state={
           report.isFetching

@@ -4,23 +4,6 @@
   min-height: 0;
   padding-top: 0.6rem;
 }
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  padding: 0 0.4rem;
-  margin-bottom: 1.2rem;
-}
-.header h1 {
-  font-size: 2.22rem;
-  letter-spacing: var(--title-tracking);
-  margin: 0 0 0.4rem;
-}
-.header p {
-  font-size: 1.22rem;
-  margin: 0;
-}
 .refresh {
   margin-left: auto;
   width: 2.4rem;
@@ -93,12 +76,6 @@
   }
 }
 @media (width <= 1300px) {
-  .header h1 {
-    font-size: 2rem;
-  }
-  .header p {
-    font-size: 1.05rem;
-  }
   .panel {
     padding: 1.3rem;
   }
@@ -114,10 +91,6 @@
   }
 }
 @media (width <= 950px) {
-  .header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
   .columns {
     grid-template-columns: 1fr;
   }
@@ -125,9 +98,6 @@
 @media (height <= 850px) {
   .page {
     padding-top: 0.6rem;
-  }
-  .header {
-    margin-bottom: 1rem;
   }
   .panel {
     padding-block: 1rem;

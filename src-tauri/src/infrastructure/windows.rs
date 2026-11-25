@@ -27,7 +27,7 @@ pub fn run_script_with_timeout<T: serde::de::DeserializeOwned>(
     if !cfg!(windows) {
         return Err("环境预检当前仅支持 Windows".into());
     }
-    let mut child = hidden("powershell.exe").args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())); & ([ScriptBlock]::Create($s))"])
+    let mut child = hidden("powershell.exe").args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $s=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd())); try { & ([ScriptBlock]::Create($s)) } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"])
  .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("无法启动 Windows 操作：{e}"))?;
     #[cfg(windows)]
     let _job = match super::managed_process::Job::new(&child) {
@@ -79,10 +79,12 @@ pub fn run_script_with_timeout<T: serde::de::DeserializeOwned>(
         .map_err(|_| "检测错误读取中断")?
         .map_err(|e| e.to_string())?;
     if !status.success() {
-        return Err(format!(
-            "Windows 操作失败：{}",
-            String::from_utf8_lossy(&errors)
-        ));
+        let stderr = String::from_utf8_lossy(&errors);
+        let message = stderr.lines().map(str::trim).find(|line| !line.is_empty())
+            .filter(|line| line.chars().count() <= 500 && !line.contains("FromBase64String(")
+                && !line.starts_with('$') && !line.starts_with("& {"))
+            .unwrap_or("Windows 未返回简短的错误说明，请查看本机事件日志");
+        return Err(format!("Windows 操作失败：{message}"));
     }
     serde_json::from_slice(&bytes).map_err(|e| format!("Windows 检查返回合同错误：{e}"))
 }

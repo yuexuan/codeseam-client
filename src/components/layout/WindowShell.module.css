@@ -4,15 +4,14 @@
   grid-template-rows: var(--titlebar-height) auto minmax(0, 1fr) auto;
   background: var(--app-background);
 }
+.simpleShell {
+  grid-template-rows: var(--titlebar-height) minmax(0, 1fr) auto;
+}
 .nodesShell {
   --page-gutter: clamp(24px, 2.8vw, 48px);
   --titlebar-height: 56px;
   --step-gutter: clamp(40px, 10.6vw, 180px);
   --action-width: 11.3rem;
-  --brand: var(--nodes-brand);
-  --brand-strong: var(--nodes-brand-strong);
-  --primary-fill: var(--nodes-primary-fill);
-  --app-background: var(--nodes-background);
 }
 .titlebar {
   display: flex;
@@ -27,27 +26,6 @@
   width: var(--logo-size);
   height: var(--logo-size);
   pointer-events: none;
-}
-.controls {
-  display: flex;
-  align-self: start;
-}
-.controls button {
-  width: var(--window-button-width);
-  height: var(--window-button-height);
-  border: 0;
-  color: var(--text);
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.controls button:hover {
-  background: var(--hover);
-}
-.controls .close:hover {
-  background: var(--danger);
-  color: var(--on-primary);
 }
 .steps {
   padding: var(--space-4) var(--step-gutter) var(--space-5);

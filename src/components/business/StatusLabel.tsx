@@ -32,7 +32,7 @@ export function StatusLabel({
     <span className={`${styles.status} ${styles[status]}`}>
       <Icon size={18} aria-hidden="true" />
       <span>
-        {status === 'scanning' ? '检测中' : (label ?? labels[status])}
+        {label ?? (status === 'scanning' ? '检测中' : labels[status])}
       </span>
     </span>
   );

@@ -1,4 +1,4 @@
-.radio {
+.choice {
   width: 1.4rem;
   height: 1.4rem;
   margin: 0;
@@ -6,6 +6,6 @@
   accent-color: var(--brand-strong);
   cursor: pointer;
 }
-.radio:disabled {
+.choice:disabled {
   cursor: not-allowed;
 }

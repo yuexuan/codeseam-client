@@ -1,3 +1,6 @@
+import { Select } from '../../components/ui/Select';
+import { TextInput } from '../../components/ui/TextInput';
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import { useState } from 'react';
 import {
   ArrowRight,
@@ -13,9 +16,9 @@ import {
 } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Surface } from '../../components/ui/Surface';
-import { StatusLabel } from '../../components/ui/StatusLabel';
+import { CheckRow } from '../../components/business/CheckRow';
 import { Button } from '../../components/ui/Button';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { WizardActions } from '../../components/layout/WizardActions';
 import {
   browserReady,
@@ -37,6 +40,9 @@ export function CompletionPage({
   onBack,
   onComplete,
   cleanupService,
+  reconfiguration = false,
+  initialAlias = '',
+  initialRegion = '',
 }: {
   result: BrowserResult;
   service: BrowserService;
@@ -45,9 +51,12 @@ export function CompletionPage({
   onBack: () => void;
   onComplete: (record: WorkbenchRecord) => void;
   cleanupService: ClaudeService;
+  reconfiguration?: boolean;
+  initialAlias?: string;
+  initialRegion?: string;
 }) {
-  const [alias, setAlias] = useState('');
-  const [region, setRegion] = useState('');
+  const [alias, setAlias] = useState(initialAlias);
+  const [region, setRegion] = useState(initialRegion);
   const p = result.profile;
   const cleanup = useQuery({
     queryKey: ['completion-cleanup'],
@@ -123,12 +132,16 @@ export function CompletionPage({
   ];
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1>确认完成</h1>
-        <p>
-          核对本次初始化结果。确认后保存正式环境基线，并进入 Claude 使用入口。
-        </p>
-      </header>
+      <WizardHeader
+        title="确认完成"
+        description={
+          <>
+            {' '}
+            核对本次初始化结果。确认后保存正式环境基线，并进入 Claude
+            使用入口。{' '}
+          </>
+        }
+      />
       <div className={styles.columns}>
         <Surface className={styles.summary}>
           <div className={styles.panelTitle}>
@@ -143,12 +156,14 @@ export function CompletionPage({
           </p>
           <div className={styles.rows}>
             {rows.map(({ icon: Icon, title, value, status, label }) => (
-              <div className={styles.row} key={title}>
-                <Icon className={styles.icon} size={27} />
-                <strong>{title}</strong>
-                <span className={styles.value}>{value}</span>
-                <StatusLabel status={status} label={label} />
-              </div>
+              <CheckRow
+                key={title}
+                icon={Icon}
+                label={title}
+                value={value}
+                status={status}
+                statusLabel={label}
+              />
             ))}
           </div>
           <p className={styles.note}>
@@ -163,7 +178,7 @@ export function CompletionPage({
           </h2>
           <label className={styles.field}>
             账号别名
-            <input
+            <TextInput
               maxLength={80}
               value={alias}
               onChange={(e) => setAlias(e.target.value)}
@@ -173,7 +188,7 @@ export function CompletionPage({
           </label>
           <label className={styles.field}>
             服务地区
-            <select
+            <Select
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               disabled={finish.isPending}
@@ -184,7 +199,7 @@ export function CompletionPage({
                   <option key={r}>{r}</option>
                 ),
               )}
-            </select>
+            </Select>
           </label>
           <p className={styles.hint}>
             仅作本机备注；服务地区为用户声明，不代表资格验证。
@@ -218,7 +233,9 @@ export function CompletionPage({
                   <small>{note}</small>
                 </div>
                 <Button
-                  disabled={finish.isPending || open.isPending}
+                  disabled={
+                    reconfiguration || finish.isPending || open.isPending
+                  }
                   onClick={() =>
                     open.mutate(
                       name === 'Claude Web'

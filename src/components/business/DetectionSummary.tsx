@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Check, CircleAlert, LoaderCircle } from 'lucide-react';
-import { Surface } from './Surface';
+import { Surface } from '../ui/Surface';
 import { StatusLabel } from './StatusLabel';
 import styles from './DetectionSummary.module.css';
 

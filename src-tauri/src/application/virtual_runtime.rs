@@ -7,6 +7,9 @@ fn controller_script() -> String {
         .trim_start_matches('\u{feff}')
         .replace("# GUEST_FUNCTIONS", include_str!("../infrastructure/guest_install.ps1").trim_start_matches('\u{feff}'))
         .replace("# GUEST_BROWSER", include_str!("../infrastructure/guest_browser.ps1").trim_start_matches('\u{feff}'))
+        .replace("# DAILY_RUNTIME", include_str!("../infrastructure/daily_virtual_runtime.ps1"))
+        .replace("# NODE_REPAIR", include_str!("../infrastructure/node_repair.ps1"))
+        .replace("# CONSOLE_DISPLAY", include_str!("../infrastructure/console_display.ps1"))
 }
 
 pub fn execute(action: String, payload: String) -> Result<String, String> {
@@ -38,13 +41,19 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
         "initialize",
         "browser_prepare",
         "ensure_ready",
+        "observe",
+        "start",
+        "open_console",
+        "pause_apps",
+        "unlock_apps",
+        "repair_node",
     ]
     .contains(&action.as_str())
     {
         return Err("未知虚拟机操作".into());
     }
     let mut input: serde_json::Value = serde_json::from_str(&payload).map_err(|e| e.to_string())?;
-    let node = if ["create", "initialize", "ensure_ready", "browser_prepare"].contains(&action.as_str()) {
+    let node = if ["create", "initialize", "ensure_ready", "browser_prepare", "repair_node"].contains(&action.as_str()) {
         let snapshot = super::nodes::read()?;
         Some(
             snapshot
@@ -60,7 +69,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
     } else {
         None
     };
-    if ["initialize", "ensure_ready", "browser_prepare"].contains(&action.as_str()) {
+    if ["initialize", "ensure_ready", "browser_prepare", "repair_node"].contains(&action.as_str()) {
         let selected = node.as_ref().ok_or("请先选择并测试节点")?;
         let timezone = super::runtime::timezone_target(selected)
             .ok_or("无法确定所选出口的目标时区，请返回第二步重新测试节点")?;
@@ -70,11 +79,13 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
     if action == "initialize" {
         vault::save("virtual-node-v1.dpapi", &serde_json::to_vec(&super::nodes::virtual_node_config()?).map_err(|e| e.to_string())?)?;
     }
+    if action == "repair_node" { input["nodeConfig"] = super::nodes::virtual_node_config()?; }
     let timeout_seconds = if action == "browser_prepare" { 900 } else { 600 };
     let request = serde_json::json!({"action": action, "config": input, "root": vault::dir()?.join("Virtual"), "node": node});
     let script = format!("$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')) | ConvertFrom-Json\n{}", STANDARD.encode(request.to_string()), controller_script());
     let result: serde_json::Value =
         windows::run_script_with_timeout(script.as_bytes(), std::time::Duration::from_secs(timeout_seconds))?;
+    if action == "repair_node" { vault::save("virtual-node-v1.dpapi", &serde_json::to_vec(&super::nodes::virtual_node_config()?).map_err(|e| e.to_string())?)?; }
     Ok(result.to_string())
 }
 
@@ -100,6 +111,29 @@ mod tests {
         let probe = format!("$s = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')); $null = [ScriptBlock]::Create($s); @{{parsed=$true}} | ConvertTo-Json", encoded);
         let result: serde_json::Value = crate::infrastructure::windows::run_script(probe.as_bytes()).unwrap();
         assert_eq!(result["parsed"], true);
+    }
+
+    #[test]
+    #[ignore = "Opens/restores the existing formal Guest console twice and checks it survives the controller job"]
+    fn daily_guest_console_reuse_live() {
+        let checkpoint: serde_json::Value = serde_json::from_str(
+            std::fs::read_to_string(crate::infrastructure::vault::dir().unwrap().join("Virtual/checkpoint.json"))
+                .unwrap().trim_start_matches('\u{feff}'),
+        ).unwrap();
+        let payload = serde_json::json!({"profile":{"runtimeId":checkpoint["vmId"]}}).to_string();
+        let open = || -> serde_json::Value {
+            serde_json::from_str(&super::execute("open_console".into(), payload.clone()).unwrap()).unwrap()
+        };
+        let first = open();
+        let second = open();
+        assert_eq!(first["opened"], true);
+        assert_eq!(second["opened"], true);
+        assert_eq!(first["processId"], second["processId"], "must restore/reuse the same console");
+        let process_id = second["processId"].as_u64().unwrap();
+        let probe = format!("@{{alive=($null -ne (Get-Process -Id {process_id} -ErrorAction SilentlyContinue))}} | ConvertTo-Json -Compress");
+        let alive: serde_json::Value = crate::infrastructure::windows::run_script(probe.as_bytes()).unwrap();
+        assert_eq!(alive["alive"], true);
+        println!("formal Guest console restored/reused and alive after controller exit: {second}");
     }
 
     #[test]

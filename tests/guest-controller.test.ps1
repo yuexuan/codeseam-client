@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $controller = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/virtual_runtime.ps1'))
 $ast = [scriptblock]::Create($controller).Ast
 $elevation = $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.IfStatementAst] } | Select-Object -First 1
@@ -29,12 +29,25 @@ try {
     if (!$result.ready -or $timer.Elapsed.TotalSeconds -ge 15) { throw 'Controller did not return promptly' }
     $childId = [int](Get-Content -LiteralPath $childIdPath -Raw)
     if (!(Get-Process -Id $childId -ErrorAction SilentlyContinue)) { throw 'Console descendant must remain alive after controller completion' }
-    'PASS: controller returns while its long-lived descendant stays open'
+    $body = "throw 'Guest 节点复验失败'"
+    $requestData = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{}'))
+    $escapedPath = $outputPath.Replace("'", "''")
+    foreach ($statement in $elevation.Clauses[0].Item2.Statements) {
+        if ($statement -is [Management.Automation.Language.AssignmentStatementAst] -and $statement.Left.Extent.Text -eq '$wrapped') {
+            . ([scriptblock]::Create($statement.Extent.Text))
+        }
+    }
+    [IO.File]::WriteAllText($wrapperPath, $wrapped, [Text.UTF8Encoding]::new($true))
+    $failed = Microsoft.PowerShell.Management\Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile', '-File', ('"' + $wrapperPath + '"')) -PassThru
+    if (!$failed.WaitForExit(10000)) { throw 'Failed controller did not exit promptly' }
+    $failed.Refresh()
+    if ($failed.ExitCode -eq 0 -or [IO.File]::ReadAllText($outputPath + '.err') -ne 'Guest 节点复验失败') { throw 'Elevation must return only the original error message' }
+    'PASS: independent console lifetime and real Guest errors across elevated stream redirection'
 } finally {
     if (Test-Path -LiteralPath $childIdPath) {
         $childId = [int](Get-Content -LiteralPath $childIdPath -Raw)
         Stop-Process -Id $childId -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $wrapperPath,$childPath,$childIdPath,$outputPath -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $wrapperPath,$childPath,$childIdPath,$outputPath,($outputPath + '.err') -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $testRoot -ErrorAction SilentlyContinue
 }

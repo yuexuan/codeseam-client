@@ -1,0 +1,36 @@
+.tabs {
+  display: flex;
+  gap: var(--space-4);
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+.tabs > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-2);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.tabs > button[aria-selected='true'] {
+  color: var(--brand-strong);
+  border-bottom-color: var(--brand);
+  font-weight: 650;
+}
+.tabs > button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.tabs > button:focus-visible {
+  outline-offset: -3px;
+}
+.tabs > button:hover:enabled {
+  background: var(--hover);
+}

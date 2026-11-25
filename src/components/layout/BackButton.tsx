@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { Button } from './Button';
+import { Button } from '../ui/Button';
 export function BackButton(props: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <Button {...props} variant="back">

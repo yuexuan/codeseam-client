@@ -1,0 +1,120 @@
+.dialog {
+  width: min(76rem, calc(100vw - 3rem));
+  height: min(54rem, calc(100dvh - 3rem));
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.dialog::backdrop {
+  background: var(--overlay);
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+.header h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.5rem;
+}
+.header p {
+  margin: 0;
+  color: var(--secondary);
+}
+.header button {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.editor {
+  flex: 1;
+  min-height: 0;
+  padding: 1.25rem 1.75rem;
+  overflow: auto;
+}
+.editor > div {
+  min-height: 31rem;
+}
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1rem 1.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--secondary);
+  font-size: 0.9rem;
+}
+.footer > div:first-child {
+  overflow-wrap: anywhere;
+  max-height: 6rem;
+  overflow: auto;
+}
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.7rem;
+}
+.actions button {
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  font-size: 0.95rem;
+}
+.header button:hover {
+  background: var(--hover);
+}
+.footer .error {
+  color: var(--danger);
+}
+.spinning {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (width <= 760px) {
+  .dialog {
+    width: calc(100vw - 1rem);
+    height: calc(100dvh - 1rem);
+  }
+  .header,
+  .footer {
+    padding: 1rem;
+  }
+  .editor {
+    padding: 1rem;
+  }
+  .footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+}

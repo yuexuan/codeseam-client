@@ -1,5 +1,8 @@
 ﻿$ErrorActionPreference = 'Stop'
 $body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_browser.ps1'))
+# 使用模拟的原生窗口验证编排流程，不修改真实窗口。
+$showDefinition = [scriptblock]::Create($body).Ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -eq 'Show-GuestConsole' }
+$body = $body.Replace($showDefinition.Extent.Text, '')
 $root = $env:TEMP
 $recordPath = 'checkpoint.json'
 $id = [guid]::NewGuid().ToString()
@@ -15,6 +18,16 @@ $script:wrongSession = $false
 $script:taskResult = 0
 $script:ranNow = $true
 $script:desktopReady = $true
+$script:shown = 0
+$script:showFails = $false
+$script:minimized = $true
+function Show-GuestConsole {
+    param($ProcessId)
+    if ($ProcessId -ne 1234) { throw 'Wrong console activated' }
+    if ($script:showFails) { throw 'Fixture window could not be restored' }
+    $script:minimized = $false
+    $script:shown++
+}
 function Get-Content {
     param($LiteralPath, [switch]$Raw)
     if ($LiteralPath -eq $recordPath) { return (@{phase='guest'; deployed=$true; name='candidate'; vmId=$id;node=$fixtureNode} | ConvertTo-Json) }
@@ -59,13 +72,18 @@ function Get-ScheduledTask { param($TaskName) return @{State='Ready'} }
 function Get-ScheduledTaskInfo { param($TaskName) return @{LastRunTime=$(if ($script:ranNow) { [DateTime]::UtcNow } else { [DateTime]::UtcNow.AddYears(-1) }); LastTaskResult=$script:taskResult} }
 function Unregister-ScheduledTask { param($TaskName,[switch]$Confirm) $script:removed++ }
 function Start-Sleep { param($Milliseconds) }
+function Set-GuestConsoleDisplay { param($VmId) if ($VmId -ne $id) { throw 'Wrong display target' } }
 $result = & ([scriptblock]::Create($body)) | ConvertFrom-Json
-if (!$result.ready -or !$result.consoleOpened -or $result.consoleProcessId -ne 1234 -or $script:launches -ne 1 -or $script:closed -ne 1 -or $script:removed -ne 1) { throw 'Next must verify the visible target console and release the session/task' }
+if (!$result.ready -or !$result.consoleOpened -or $result.consoleProcessId -ne 1234 -or $script:launches -ne 1 -or $script:closed -ne 1 -or $script:removed -ne 1 -or $script:shown -ne 1 -or $script:minimized) { throw 'Next must show the target console and release the session/task' }
+$script:minimized = $true
 $null = & ([scriptblock]::Create($body))
-if ($script:launches -ne 1) { throw 'Existing target console must be reused' }
+if ($script:launches -ne 1 -or $script:shown -ne 2 -or $script:minimized) { throw 'Existing minimized console must be restored and reused' }
+$script:showFails = $true
+try { $null = & ([scriptblock]::Create($body)); throw 'Accepted failed window restore' } catch { if ($_.Exception.Message -ne 'Fixture window could not be restored') { throw } }
+$script:showFails = $false
 $request.config.openConsole = $false
 $background = & ([scriptblock]::Create($body)) | ConvertFrom-Json
-if ($background.consoleOpened -or $script:launches -ne 1) { throw 'Background readiness checks must not open another console' }
+if ($background.consoleOpened -or $script:launches -ne 1 -or $script:shown -ne 2) { throw 'Background readiness checks must not open or activate a console' }
 $request.config.openConsole = $true
 $script:desktopReady = $false
 $closedBefore = $script:closed
@@ -74,7 +92,7 @@ if ($script:closed -ne $closedBefore + 1 -or $script:launches -ne 1) { throw 'Mi
 $script:desktopReady = $true
 # Load helpers independently so timeout paths need not wait 20 seconds.
 $ast = [scriptblock]::Create($body).Ast
-foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] }) { . ([scriptblock]::Create($definition.Extent.Text)) }
+foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ne 'Show-GuestConsole' }) { . ([scriptblock]::Create($definition.Extent.Text)) }
 $script:wrongTarget = $true
 if (Find-GuestConsole $id) { throw 'A different VM must not satisfy console readiness' }
 $script:wrongTarget = $false

@@ -1,0 +1,14 @@
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-heading);
+  line-height: 1.3;
+  font-weight: 650;
+}
+.title svg {
+  color: var(--brand);
+  width: 1.65rem;
+  height: 1.65rem;
+}

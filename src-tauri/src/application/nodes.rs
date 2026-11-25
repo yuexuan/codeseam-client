@@ -458,12 +458,23 @@ pub fn test_ordered_with_progress(
     ids: Vec<String>,
     progress: impl Fn(NodeSnapshot),
 ) -> Result<(), String> {
+    test_nodes(ids, true, progress)
+}
+
+pub(super) fn test_all_in_background() -> Result<(), String> {
+    test_nodes(Vec::new(), false, |_| {})
+}
+
+fn test_nodes(ids: Vec<String>, publish_pending: bool, progress: impl Fn(NodeSnapshot)) -> Result<(), String> {
     let mut store = {
         let _guard = store_lock()?;
         load()?
     };
     let ranks: std::collections::HashMap<_, _> =
         ids.iter().enumerate().map(|(i, id)| (id, i)).collect();
+    if !ids.is_empty() {
+        store.nodes.retain(|node| ranks.contains_key(&node.summary.id));
+    }
     store
         .nodes
         .sort_by_key(|node| ranks.get(&node.summary.id).copied().unwrap_or(usize::MAX));
@@ -512,13 +523,9 @@ pub fn test_ordered_with_progress(
         progress(snapshot);
         Ok(())
     };
-    publish(
-        &store
-            .nodes
-            .iter()
-            .map(|n| n.summary.clone())
-            .collect::<Vec<_>>(),
-    )?;
+    if publish_pending {
+        publish(&store.nodes.iter().map(|n| n.summary.clone()).collect::<Vec<_>>())?;
+    }
     let next = std::sync::atomic::AtomicUsize::new(0);
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::scope(|scope| -> Result<(), String> {
@@ -583,7 +590,9 @@ pub fn test_ordered_with_progress(
         }
         drop(sender);
         for summary in receiver {
-            publish(&[summary])?;
+            if publish_pending || summary.status != "testing" {
+                publish(&[summary])?;
+            }
         }
         Ok(())
     })?;

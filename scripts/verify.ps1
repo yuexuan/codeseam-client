@@ -7,6 +7,8 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Frontend checks failed' }
   npm test
   if ($LASTEXITCODE -ne 0) { throw 'Rule tests failed' }
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/runtime-startup.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Runtime startup tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-lifecycle.test.ps1
   if ($LASTEXITCODE -ne 0) { throw 'Browser lifecycle tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-close.test.ps1
@@ -21,6 +23,12 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Guest timezone tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-console.test.ps1
   if ($LASTEXITCODE -ne 0) { throw 'Guest console tests failed' }
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/console-window.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Console window restore tests failed' }
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/console-display.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Console display tests failed' }
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/node-repair.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Node repair tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-controller.test.ps1
   if ($LASTEXITCODE -ne 0) { throw 'Guest controller tests failed' }
   cargo test --manifest-path src-tauri/Cargo.toml --locked

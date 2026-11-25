@@ -6,19 +6,6 @@
   flex-direction: column;
   min-height: 100%;
 }
-.header {
-  padding: 0 0.2rem 1.25rem;
-}
-.header h1 {
-  font-size: var(--font-title);
-  margin: 0 0 0.45rem;
-  letter-spacing: var(--title-tracking);
-}
-.header p {
-  margin: 0;
-  font-size: var(--font-subtitle);
-  color: var(--secondary);
-}
 .columns {
   display: grid;
   grid-template-columns: 1.42fr 1fr;
@@ -45,22 +32,6 @@
 .progress strong {
   font-size: var(--font-heading);
 }
-.task {
-  display: grid;
-  grid-template-columns: 2rem 11.5rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid var(--separator);
-  font-size: var(--font-base);
-}
-.icon {
-  color: var(--brand);
-}
-.value {
-  color: var(--secondary);
-  overflow-wrap: anywhere;
-}
 .panelTitle {
   display: flex;
   align-items: center;
@@ -85,14 +56,7 @@
   font-weight: 600;
 }
 .browser select {
-  min-width: 0;
   flex: 1;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
 }
 .group {
   display: grid;
@@ -145,10 +109,6 @@
   color: var(--secondary);
 }
 @media (width <= 1200px) {
-  .task {
-    grid-template-columns: 1.8rem 9rem minmax(0, 1fr) auto;
-    gap: 0.5rem;
-  }
   .group {
     grid-template-columns: 1fr;
   }
@@ -165,18 +125,12 @@
   }
 }
 @media (height <= 850px) and (width > 850px) {
-  .header {
-    padding-bottom: 0.8rem;
-  }
   .tasks,
   .parameters {
     padding: 1rem;
   }
   .progress {
     margin-bottom: 0.7rem;
-  }
-  .task {
-    padding-block: 0.65rem;
   }
   .group {
     padding-block: 0.45rem;

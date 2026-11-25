@@ -37,6 +37,10 @@ pub fn run() {
     let builder = bindings();
     tauri::Builder::default()
         .manage(commands::Operations::default())
+        .setup(|app| {
+            commands::start_daily_checks(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(builder.invoke_handler())
         .run(tauri::generate_context!())
         .expect("CodeSeam 启动失败");

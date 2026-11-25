@@ -22,3 +22,11 @@
 .scanning {
   color: var(--muted);
 }
+.scanning svg {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

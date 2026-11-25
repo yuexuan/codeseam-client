@@ -1,0 +1,20 @@
+.notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1.1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--brand-strong);
+}
+.notice small {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--muted);
+}
+.notice button {
+  flex-shrink: 0;
+}

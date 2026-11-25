@@ -1,3 +1,6 @@
+import { Select } from '../../components/ui/Select';
+import { TextInput } from '../../components/ui/TextInput';
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -24,7 +27,7 @@ import {
 } from '../../services/runtime/virtual';
 import { Surface } from '../../components/ui/Surface';
 import { Button } from '../../components/ui/Button';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { WizardActions } from '../../components/layout/WizardActions';
 import styles from './VirtualPage.module.css';
 const demo = new URLSearchParams(location.search).get('virtual');
@@ -42,10 +45,12 @@ const tasks = [
 export function VirtualPage({
   onBack,
   onContinue = () => {},
+  onBusyChange,
 }: {
   service?: RuntimeService;
   onBack: () => void;
   onContinue?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const [config, setConfig] = useState<VMConfig>({
     name: 'CodeSeam-Claude-01',
@@ -214,6 +219,12 @@ export function VirtualPage({
     guest.data?.error ||
     guest.isError
   );
+  useEffect(() => {
+    onBusyChange?.(
+      busy || (phase === 'guest' && !guestFailed && !guest.data?.ready),
+    );
+    return () => onBusyChange?.(false);
+  }, [busy, phase, guestFailed, guest.data?.ready, onBusyChange]);
   const statusError =
     initializationError ||
     guest.data?.error ||
@@ -242,7 +253,7 @@ export function VirtualPage({
         <Icon />
         <strong>{label}</strong>
         <div>
-          <input
+          <TextInput
             aria-label={label}
             type={numeric ? 'number' : 'text'}
             value={config[key]}
@@ -261,16 +272,16 @@ export function VirtualPage({
   }
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1>{title}</h1>
-        <p>
-          {preparing
+      <WizardHeader
+        title={title}
+        description={
+          preparing
             ? 'CodeSeam 将自动准备创建独立 Windows 环境所需的系统组件。'
             : phase === 'guest'
               ? '在 Guest 内准备系统与受管网络，确保每项检查具有独立证据。'
-              : '为 Claude 准备单独的 Windows 虚拟机，确认资源配置后再创建。'}
-        </p>
-      </header>
+              : '为 Claude 准备单独的 Windows 虚拟机，确认资源配置后再创建。'
+        }
+      />
       {phase !== 'guest' &&
         phase !== 'installing' &&
         (resource.error || action.error) && (
@@ -483,7 +494,7 @@ export function VirtualPage({
             <label className={styles.field}>
               <Grid2X2 />
               <strong>操作系统</strong>
-              <input
+              <TextInput
                 aria-label="操作系统"
                 value="Windows 10 x64 · Generation 2"
                 readOnly
@@ -497,7 +508,7 @@ export function VirtualPage({
               <Network />
               <strong>虚拟网络</strong>
               <div>
-                <select
+                <Select
                   aria-label="虚拟网络"
                   value={config.network}
                   disabled={busy}
@@ -509,7 +520,7 @@ export function VirtualPage({
                   {r?.switches.map((n) => (
                     <option key={n}>{n}</option>
                   ))}
-                </select>
+                </Select>
                 {errors.network && <small>{errors.network}</small>}
               </div>
             </label>

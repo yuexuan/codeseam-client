@@ -1,3 +1,5 @@
+import { Checkbox } from '../../components/ui/Checkbox';
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Surface } from '../../components/ui/Surface';
 import { Button } from '../../components/ui/Button';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { WizardActions } from '../../components/layout/WizardActions';
 import type { ClaudeService, CleanupAction } from '../../services/claude';
 import styles from './ClaudePage.module.css';
@@ -67,10 +69,10 @@ export function ClaudePage({
   const error = operation.error ?? report.error;
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <h1>Claude 配置清理</h1>
-        <p>清理旧连接与运行配置，为新的运行环境做好准备。</p>
-      </header>
+      <WizardHeader
+        title="Claude 配置清理"
+        description={<> 清理旧连接与运行配置，为新的运行环境做好准备。 </>}
+      />
       {error && (
         <p role="alert" className={styles.error}>
           {error.message}
@@ -114,8 +116,7 @@ export function ClaudePage({
               const Icon = item.id === 'desktop' ? Monitor : SquareTerminal;
               return (
                 <label className={styles.row} key={item.id}>
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={!excluded.includes(item.id)}
                     disabled={busy || scanning}
                     onChange={(event) =>

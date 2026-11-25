@@ -9,7 +9,8 @@ if (!$admin) {
     $body = $MyInvocation.MyCommand.ScriptBlock.ToString()
     $body = $body.Substring($body.IndexOf("`$ErrorActionPreference = 'Stop'"))
     $requestData = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($request | ConvertTo-Json -Depth 20 -Compress)))
-    $wrapped = "`$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$requestData')) | ConvertFrom-Json; & { $body } > '$escapedPath' 2> '$escapedPath.err'"
+    $wrapped = "`$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$requestData')) | ConvertFrom-Json; & { $body } > '$escapedPath'"
+    $wrapped = "try { $wrapped } catch { [IO.File]::WriteAllText('$escapedPath.err', `$_.Exception.Message); exit 1 }"
     $wrapperPath = $outputPath + '.ps1'
     $wrapped | Set-Content -LiteralPath $wrapperPath -Encoding UTF8
     try {
@@ -20,16 +21,18 @@ if (!$admin) {
         if (!$process.WaitForExit($timeoutSeconds * 1000)) { throw ('虚拟机控制操作在 ' + $timeoutSeconds + ' 秒内未完成，请复核实际状态后重试。') }
         $process.Refresh()
         if ($process.ExitCode -ne 0) {
-            $detail = Get-Content -LiteralPath "$outputPath.err" -Raw -ErrorAction SilentlyContinue
+            $detail = Get-Content -LiteralPath "$outputPath.err" -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
             if (![string]::IsNullOrWhiteSpace($detail)) { throw $detail }
             throw ('虚拟机控制器异常退出，退出码：' + $process.ExitCode + '；操作：' + $request.action)
         }
         Get-Content -LiteralPath $outputPath -Raw
     } catch {
-        if ($_.Exception.NativeErrorCode -eq 1223) {
+        $reason = $_.Exception
+        while ($reason.InnerException) { $reason = $reason.InnerException }
+        if ($reason.NativeErrorCode -eq 1223 -or ($reason.HResult -band 0xffff) -eq 1223) {
             [Console]::Error.WriteLine('已取消管理员授权，请重新检测后允许 Windows 授权。')
         } else {
-            [Console]::Error.WriteLine('管理员授权或虚拟机操作失败：' + $_.Exception.Message)
+            [Console]::Error.WriteLine($_.Exception.Message)
         }
         exit 1
     }
@@ -108,7 +111,7 @@ try {
             Save-Checkpoint $record
             $record | ConvertTo-Json -Depth 10 -Compress
         }
-        { $_ -in @('browser_prepare', 'ensure_ready') } {
+        { $_ -in @('browser_prepare', 'ensure_ready', 'observe', 'start', 'open_console', 'pause_apps', 'unlock_apps', 'repair_node') } {
             # GUEST_BROWSER
         }
         'initialize' {
@@ -162,4 +165,6 @@ try {
         }
 
     }
-} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }
+} catch {
+    throw $_.Exception.Message
+}

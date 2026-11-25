@@ -1,8 +1,9 @@
-import { StatusLabel } from '../../components/ui/StatusLabel';
+import { WizardHeader } from '../../components/layout/WizardHeader';
+import { CheckRow } from '../../components/business/CheckRow';
 import { WizardActions } from '../../components/layout/WizardActions';
 import { Select } from '../../components/ui/Select';
 import { Radio } from '../../components/ui/Radio';
-import { BackButton } from '../../components/ui/BackButton';
+import { BackButton } from '../../components/layout/BackButton';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -49,19 +50,29 @@ export function RuntimePage({
   onBack,
   onContinue,
   onVirtualChange,
+  initialMode,
+  onBusyChange,
 }: {
   service: RuntimeService;
   onBack: () => void;
   onContinue: () => void;
   onVirtualChange: (virtual: boolean) => void;
+  initialMode?: 'native' | 'virtual';
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const client = useQueryClient();
   const [dns, setDns] = useState('cloudflare');
   const [message, setMessage] = useState('');
   const [phase, setPhase] = useState<
     'choose' | 'native' | 'compatibility' | 'virtual'
-  >('choose');
-  const [mode, setMode] = useState('native');
+  >(
+    initialMode === 'native'
+      ? 'native'
+      : initialMode === 'virtual'
+        ? 'virtual'
+        : 'choose',
+  );
+  const [mode, setMode] = useState(initialMode ?? 'native');
   const [settingsOpened, setSettingsOpened] = useState(false);
   const report = useQuery({
     queryKey: ['runtime'],
@@ -139,8 +150,11 @@ export function RuntimePage({
       <HyperVPage
         service={service}
         onBack={() => {
-          setPhase('choose');
-          onVirtualChange(false);
+          if (initialMode) onBack();
+          else {
+            setPhase('choose');
+            onVirtualChange(false);
+          }
         }}
         onContinue={() => setPhase('virtual')}
       />
@@ -149,7 +163,8 @@ export function RuntimePage({
     return (
       <VirtualPage
         service={service}
-        onBack={() => setPhase('compatibility')}
+        onBusyChange={onBusyChange}
+        onBack={() => (initialMode ? onBack() : setPhase('compatibility'))}
         onContinue={onContinue}
       />
     );
@@ -157,15 +172,14 @@ export function RuntimePage({
     <div
       className={`${styles.page} ${phase === 'native' ? styles.native : ''}`}
     >
-      <header className={styles.header}>
-        <div>
-          <h1>{phase === 'choose' ? '运行环境' : '运行环境 · 本机运行'}</h1>
-          <p>
-            {phase === 'choose'
-              ? '根据已选出口，检查系统环境并选择运行方式。'
-              : '自动检测本机系统是否与当前节点匹配，全部达标后即可继续。'}
-          </p>
-        </div>
+      <WizardHeader
+        title={phase === 'choose' ? '运行环境' : '运行环境 · 本机运行'}
+        description={
+          phase === 'choose'
+            ? '根据已选出口，检查系统环境并选择运行方式。'
+            : '自动检测本机系统是否与当前节点匹配，全部达标后即可继续。'
+        }
+      >
         <div className={styles.node}>
           当前节点：<strong>{data?.node.name ?? '读取中'}</strong>
           <br />
@@ -175,7 +189,7 @@ export function RuntimePage({
             {data?.targetTimezone ?? '待检测'}
           </span>
         </div>
-      </header>
+      </WizardHeader>
       {error && (
         <p className={styles.error} role="alert">
           {error.message}
@@ -194,35 +208,31 @@ export function RuntimePage({
             </Button>
           </div>
           {report.isFetching && <p role="status">正在读取本机环境…</p>}
-          <div className={styles.rows}>
+          <div>
             {data?.checks.map((check) => {
               const Icon = icons[check.id as keyof typeof icons] ?? Info;
               return (
-                <div
-                  className={styles.row}
+                <CheckRow
                   key={check.id}
                   title={`${check.detail}\n来源：${check.source}`}
-                >
-                  <Icon className={styles.icon} />
-                  <strong>{check.label}</strong>
-                  <span className={styles.value}>{check.value}</span>
-                  <StatusLabel
-                    status={report.isFetching ? 'scanning' : check.status}
-                    label={
-                      check.status === 'satisfied'
-                        ? '匹配'
-                        : check.status === 'optional'
-                          ? check.id === 'culture'
-                            ? '已读取'
-                            : '后续检测'
-                          : check.status === 'pending'
-                            ? check.id === 'timezone' || check.id === 'exit'
-                              ? '不一致'
-                              : '待处理'
-                            : '待检测'
-                    }
-                  />
-                </div>
+                  icon={Icon}
+                  label={check.label}
+                  value={check.value}
+                  status={report.isFetching ? 'scanning' : check.status}
+                  statusLabel={
+                    check.status === 'satisfied'
+                      ? '匹配'
+                      : check.status === 'optional'
+                        ? check.id === 'culture'
+                          ? '已读取'
+                          : '后续检测'
+                        : check.status === 'pending'
+                          ? check.id === 'timezone' || check.id === 'exit'
+                            ? '不一致'
+                            : '待处理'
+                          : '待检测'
+                  }
+                />
               );
             })}
           </div>
@@ -362,7 +372,7 @@ export function RuntimePage({
         <BackButton
           disabled={busy}
           onClick={() => {
-            if (phase === 'native') {
+            if (phase === 'native' && !initialMode) {
               setPhase('choose');
             } else onBack();
           }}

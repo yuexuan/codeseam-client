@@ -1,0 +1,4 @@
+.panel.panel {
+  border-top-color: var(--selected-line);
+  border-radius: 1.15rem;
+}

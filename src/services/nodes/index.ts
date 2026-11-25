@@ -7,6 +7,20 @@ import {
 } from '../../bindings/commands';
 import { call } from '../../core/ipc/call';
 export type ProxyProtocol = 'socks5' | 'http' | 'https';
+export async function checkKernelRelease(): Promise<{ version: string }> {
+  const response = await fetch(
+    'https://api.github.com/repos/MetaCubeX/mihomo/releases/latest',
+    {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!response.ok) throw new Error('无法检查 Mihomo 更新，请稍后重试');
+  const release: { tag_name?: string } = await response.json();
+  if (!release.tag_name || !/^v\d+\.\d+\.\d+$/.test(release.tag_name))
+    throw new Error('未获取到有效的 Mihomo 稳定版本');
+  return { version: release.tag_name };
+}
 export interface NodesService {
   subscribe?(listener: (snapshot: NodeSnapshot) => void): Promise<() => void>;
   read(): Promise<NodeSnapshot>;

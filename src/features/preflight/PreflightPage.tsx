@@ -1,3 +1,4 @@
+import { WizardHeader } from '../../components/layout/WizardHeader';
 import {
   Monitor,
   Layers,
@@ -16,11 +17,11 @@ import {
   RotateCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Check, Group, Report } from '../../bindings/commands';
+import type { Group, Report } from '../../bindings/commands';
 import { Button } from '../../components/ui/Button';
 import { Surface } from '../../components/ui/Surface';
-import { StatusLabel } from '../../components/ui/StatusLabel';
-import { DetectionSummary } from '../../components/ui/DetectionSummary';
+import { CheckRow } from '../../components/business/CheckRow';
+import { DetectionSummary } from '../../components/business/DetectionSummary';
 import { summarize } from './model';
 import styles from './PreflightPage.module.css';
 const groups: {
@@ -61,17 +62,6 @@ const icons: Record<string, LucideIcon> = {
   proxy: Layers,
   hyperv: Cpu,
 };
-function CheckRow({ item }: { item: Check }) {
-  const Icon = icons[item.id] ?? Info;
-  return (
-    <div className={styles.row}>
-      <Icon className={styles.rowIcon} size={21} aria-hidden="true" />
-      <span className={styles.label}>{item.label}</span>
-      <span className={styles.value}>{item.value}</span>
-      <StatusLabel status={item.status} />
-    </div>
-  );
-}
 export function PreflightPage({
   report,
   scanning,
@@ -86,11 +76,10 @@ export function PreflightPage({
   const summary = report ? summarize(report) : null;
   return (
     <>
-      <div className={styles.header}>
-        <div>
-          <h1>环境预检</h1>
-          <p>检查这台电脑是否已准备好运行 Claude 全家桶</p>
-        </div>
+      <WizardHeader
+        title="环境预检"
+        description={<> 检查这台电脑是否已准备好运行 Claude 全家桶 </>}
+      >
         <Button
           variant="icon"
           aria-label="重新检测"
@@ -99,7 +88,7 @@ export function PreflightPage({
         >
           <RotateCw size={23} />
         </Button>
-      </div>
+      </WizardHeader>
       <DetectionSummary
         state={
           scanning
@@ -147,7 +136,16 @@ export function PreflightPage({
               </h2>
               <div className={styles.rows}>
                 {report ? (
-                  primary.map((item) => <CheckRow key={item.id} item={item} />)
+                  primary.map((item) => (
+                    <CheckRow
+                      key={item.id}
+                      compact
+                      icon={icons[item.id] ?? Info}
+                      label={item.label}
+                      value={item.value}
+                      status={item.status}
+                    />
+                  ))
                 ) : (
                   <div className={styles.waiting}>
                     {error ? (
