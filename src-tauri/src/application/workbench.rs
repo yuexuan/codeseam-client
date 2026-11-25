@@ -11,7 +11,7 @@ fn now() -> String {
         .as_secs()
         .to_string()
 }
-pub(super) fn load() -> Result<Option<Value>, String> {
+pub(crate) fn load() -> Result<Option<Value>, String> {
     vault::read(RECORD)?
         .map(|bytes| {
             let v: Value =
@@ -27,7 +27,7 @@ pub(super) fn load() -> Result<Option<Value>, String> {
         })
         .transpose()
 }
-fn save(value: &Value) -> Result<(), String> {
+pub(super) fn save(value: &Value) -> Result<(), String> {
     vault::save(
         RECORD,
         &serde_json::to_vec(value).map_err(|e| e.to_string())?,
@@ -62,6 +62,9 @@ fn valid_profile(p: &Value) -> bool {
 }
 fn validate_daily_browser(record: &Value) -> Result<(), String> {
     validate_browser_with_runtime(record, &Value::Null)
+}
+fn validate_runtime_start(record: &Value) -> Result<(),String> {
+    if record["reconfiguration"].is_object() { return Err("请先完成或取消运行环境重新配置".into()) } Ok(())
 }
 
 fn validate_browser_with_runtime(record: &Value, observed: &Value) -> Result<(), String> {
@@ -123,12 +126,7 @@ fn refresh_observation(record: &mut Value, full: bool) {
             json!({"at":now(),"browser":browser,"runtime":runtime,"processes":details["processes"],"environment":details,"error":error})
         }
         Err(error) => {
-            let mut previous = record["observation"].clone();
-            if !previous.is_object() {
-                previous = json!({"at":now(),"runtime":null,"processes":null});
-            }
-            previous["error"] = json!(error);
-            previous
+            json!({"at":now(),"runtime":null,"processes":null,"browser":{"at":now(),"online":false,"error":error},"environment":{"at":now(),"state":"Unknown","online":false,"checks":[],"error":error},"error":error})
         }
     };
     let ok = observation["error"].is_null();
@@ -136,12 +134,21 @@ fn refresh_observation(record: &mut Value, full: bool) {
     event(
         record,
         if ok {
-            "当前 Runtime 只读检测完成；进程保护路径仍待验证"
+            "当前 Runtime 只读检测完成"
         } else {
             "当前 Runtime 检测未完成，请查看环境详情"
         },
         if ok { "info" } else { "warning" },
     );
+}
+
+pub(crate) fn guardian_poll() -> Result<Option<String>, String> {
+    let Some(mut record)=load()? else { return Ok(None) };
+    if record["reconfiguration"].is_object() || record["nodeRepair"].is_object() { return Ok(None) }
+    let previous=record.clone();
+    super::guardian::poll(&mut record)?;
+    if previous==record { return Ok(None) }
+    save(&record)?; Ok(Some(record.to_string()))
 }
 
 pub(crate) fn scheduled_refresh() -> Result<Option<String>, String> {
@@ -189,6 +196,8 @@ fn observation_browser_is_idle(record: &Value) -> bool {
 }
 pub fn execute(action: String, payload: String) -> Result<String, String> {
     let input: Value = serde_json::from_str(&payload).map_err(|_| "工作台请求无效")?;
+    if action=="preferences" { return Ok(super::lifecycle::preferences()?.to_string()) }
+    if action=="startup_preference" { return Ok(super::lifecycle::set_startup(input["enabled"].as_bool().ok_or("缺少启动偏好")?)?.to_string()) }
     if action == "reset" {
         return super::reset::execute(input);
     }
@@ -238,7 +247,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
         event(&mut record, "用户确认初始化，正式环境基线已保存", "success");
         event(
             &mut record,
-            "持续 Guardian 与进程路径保护尚未接通，保护状态待验证",
+            "正式基线已确认，Guardian 将开始后台复验",
             "warning",
         );
         let reconfigured = previous.is_some();
@@ -247,6 +256,9 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
             event(&mut record, "目标环境验收完成，已切换正式 Runtime；旧环境和历史基线已保留", "success");
         }
         save(&record)?;
+        if let Err(error)=super::guardian::ensure(&record,false) {
+            event(&mut record,&format!("Guardian 启动未完成：{error}"),"warning"); save(&record)?;
+        }
         if reconfigured {
             if let Err(error) = super::runtime_management::observe(&record, "unlock_apps") {
                 event(&mut record, &format!("新正式基线已保存，专用快捷方式尚待解锁；请从工作台重新打开应用：{error}"), "warning");
@@ -257,6 +269,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
     }
     let mut record = load()?.ok_or("请先完成初始化确认")?;
     match action.as_str() {
+        "guardian_history" => return Ok(super::guardian_events::history(input["cursor"].as_str())?.to_string()),
         "node_switch" => {
             let snapshot = super::nodes::read()?;
             let id = input["id"].as_str().ok_or("缺少目标节点")?;
@@ -288,15 +301,52 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
             record["nodeRepair"] = Value::Null;
             event(&mut record, "节点配置已应用，出口与专用浏览器复验通过；历史基线已保留", "success");
             save(&record)?;
+            super::guardian::ensure(&record,false)?;
         }
         "runtime_start" => {
-            if record["reconfiguration"].is_object() { return Err("请先完成或取消运行环境重新配置".into()); }
+            validate_runtime_start(&record)?;
             // 先恢复本应用管理的运行环境。待处理的节点操作属于后续连接检查，
             // 不应被误判为虚拟机故障。
             if record["virtualRuntime"] == true {
-                return Ok(super::runtime_management::observe(&record, "start")?.to_string());
+                let result=super::runtime_management::observe(&record, "start")?;
+                super::guardian::ensure(&record, false)?;
+                return Ok(result.to_string());
             }
+            super::guardian::ensure(&record, false)?;
             return Ok(json!({"ready":true}).to_string());
+        }
+        "runtime_stop" => {
+            if record["virtualRuntime"] != true { return Err("本机运行不支持关闭宿主机".into()) }
+            let result=super::runtime_management::observe(&record,"stop");
+            refresh_observation(&mut record, false);
+            event(&mut record, if result.is_ok() {"虚拟机已正常关闭，Guest 应用离线"} else {"虚拟机关机未完成，请检查真实运行状态"}, if result.is_ok() {"info"} else {"warning"});
+            save(&record)?; result?;
+        }
+        "guardian_recover" => {
+            if record["reconfiguration"].is_object() || record["nodeRepair"].is_object() { return Err("请先完成当前环境或节点操作".into()) }
+            validate_daily_browser(&record)?;
+            super::runtime_management::app_action(&record,"repair","",false)?;
+            super::guardian::ensure(&record, true)?;
+            event(&mut record,"用户请求按原正式基线重新复验；账号已重新确认，复验通过前保持锁定","info");
+            save(&record)?;
+        }
+        "app_start" | "app_stop" => {
+            let kind=input["app"].as_str().filter(|s| matches!(*s,"web"|"code"|"desktop")).ok_or("应用类型无效")?;
+            if action=="app_start" {
+                if kind=="web" { return execute("open".into(),"{}".into()) }
+                validate_daily_browser(&record)?; super::guardian::allows_launch(&record)?;
+            }
+            let result=super::runtime_management::app_action(&record,if action=="app_start" {"start"} else {"stop"},kind,true)?;
+            if action=="app_stop" && result["stopped"]!=true { return Err("仍有身份待确认的进程，未将其强制关闭，请核对进程详情".into()) }
+            event(&mut record,&format!("Claude {kind} 已{}",if action=="app_start" {"请求启动"} else {"停止"}),"info");
+            save(&record)?;
+        }
+        "exit_prepare" => {
+            let result=super::runtime_management::app_action(&record,"stop","",input["force"]==true)?;
+            if result["stopped"]!=true { return Ok(result.to_string()) }
+            super::runtime_management::app_action(&record,"shutdown","",false)?;
+            super::guardian::stop(&record)?;
+            return Ok(json!({"stopped":true,"remaining":[]}).to_string());
         }
         "browser_details" => {
             return Ok(super::runtime_management::observe(&record, "read_browser")?.to_string());
@@ -320,6 +370,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
             super::runtime_management::cancel(&mut record)?;
             event(&mut record, "已取消运行环境切换，原正式 Runtime 与数据已保留", "info");
             save(&record)?;
+            super::guardian::ensure(&record,false)?;
         }
         "refresh_browser" => {
             let details = super::runtime_management::observe(&record, "read_browser")?;
@@ -333,6 +384,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
         "open" | "install_code" | "install_desktop" => {
             if record["reconfiguration"].is_object() { return Err("运行环境正在重新配置，请完成或取消后再启动应用".into()); }
             validate_daily_browser(&record)?;
+            super::guardian::allows_launch(&record)?;
             let p = &record["baseline"]["profile"];
             super::browser::execute(
                 record["virtualRuntime"] == true,
@@ -415,17 +467,17 @@ mod tests {
             let mut native_record = record.clone();
             native_record["virtualRuntime"] = json!(false);
             save(&native_record).unwrap();
-            assert_eq!(serde_json::from_str::<Value>(&execute("runtime_start".into(), "{}".into()).unwrap()).unwrap()["ready"], true);
+            assert!(validate_runtime_start(&native_record).is_ok());
             assert!(validate_daily_browser(&native_record).unwrap_err().contains("所选节点"));
             assert_eq!(load().unwrap().unwrap()["baseline"], record["baseline"]);
             native_record["nodeRepair"] = json!({"backup":"RuntimeHistory/pending-node"});
             save(&native_record).unwrap();
-            assert!(execute("runtime_start".into(), "{}".into()).is_ok());
+            assert!(validate_runtime_start(&native_record).is_ok());
             assert!(validate_daily_browser(&native_record).unwrap_err().contains("节点修复尚未完成"));
             assert_eq!(load().unwrap().unwrap()["nodeRepair"], native_record["nodeRepair"]);
             native_record["reconfiguration"] = json!({"virtualRuntime":true});
             save(&native_record).unwrap();
-            assert!(execute("runtime_start".into(), "{}".into()).unwrap_err().contains("重新配置"));
+            assert!(validate_runtime_start(&native_record).unwrap_err().contains("重新配置"));
             save(&record).unwrap();
             assert!(execute("confirm".into(), "{}".into())
                 .unwrap_err()

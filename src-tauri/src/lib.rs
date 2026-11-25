@@ -2,6 +2,7 @@ mod application;
 mod commands;
 mod domain;
 mod infrastructure;
+use tauri::{Emitter, Manager};
 fn bindings() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::new().commands(tauri_specta::collect_commands![
         commands::claude_cleanup,
@@ -38,8 +39,27 @@ pub fn run() {
     tauri::Builder::default()
         .manage(commands::Operations::default())
         .setup(|app| {
+            use tauri::menu::{Menu,MenuItem};
+            use tauri::tray::{TrayIconBuilder,TrayIconEvent,MouseButton,MouseButtonState};
+            let open=MenuItem::with_id(app,"open","打开工作台",true,None::<&str>)?;
+            let quit=MenuItem::with_id(app,"quit","退出 CodeSeam",true,None::<&str>)?;
+            let menu=Menu::with_items(app,&[&open,&quit])?;
+            let mut tray=TrayIconBuilder::new().menu(&menu).tooltip("CodeSeam · Guardian").show_menu_on_left_click(false)
+                .on_menu_event(|app,event| {
+                    if event.id.as_ref()=="quit" && application::workbench::load().ok().flatten().is_none() { app.exit(0); return }
+                    if let Some(window)=app.get_webview_window("main") { let _=window.show(); let _=window.unminimize(); let _=window.set_focus(); if event.id.as_ref()=="quit" { let _=app.emit("exit-requested",()); } }
+                })
+                .on_tray_icon_event(|tray,event| { if matches!(event,TrayIconEvent::Click {button:MouseButton::Left,button_state:MouseButtonState::Up,..}) { if let Some(window)=tray.app_handle().get_webview_window("main") { let _=window.show();let _=window.unminimize();let _=window.set_focus(); } } });
+            if let Some(icon)=app.default_window_icon() { tray=tray.icon(icon.clone()); }
+            tray.build(app)?;
+            if std::env::args().any(|arg|arg=="--background") { if let Some(window)=app.get_webview_window("main") { let _=window.hide(); } }
             commands::start_daily_checks(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window,event| {
+            if let tauri::WindowEvent::CloseRequested {api,..}=event {
+                if application::workbench::load().ok().flatten().is_some() { api.prevent_close(); let _=window.hide(); }
+            }
         })
         .invoke_handler(builder.invoke_handler())
         .run(tauri::generate_context!())

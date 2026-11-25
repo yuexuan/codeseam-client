@@ -15,6 +15,8 @@ import {
   MemoryStick,
   Monitor,
   PanelsTopLeft,
+  Play,
+  Square,
   RefreshCw,
   Server,
   ShieldCheck,
@@ -48,21 +50,32 @@ export function EnvironmentPage({
   data?: EnvironmentDetails;
   checking: boolean;
   error?: string | null;
-  refresh: () => void;
+  refresh: (includeBrowser?: boolean) => void;
 }) {
   const [switching, setSwitching] = useState(false);
   const [consoleOpened, setConsoleOpened] = useState(false);
   const virtual = record.virtualRuntime;
+  const [targetRuntime, setTargetRuntime] = useState(virtual);
   const console = useMutation({
     mutationFn: () => service.openConsole(),
     onSuccess: () => setConsoleOpened(true),
   });
   const reconfigure = useMutation({
-    mutationFn: () => service.begin(!virtual),
+    mutationFn: () => service.begin(targetRuntime),
     onSuccess: onReconfigure,
   });
+  const power = useMutation({
+    mutationFn: (action: 'start' | 'stop') =>
+      action === 'stop' ? service.stop() : service.start(),
+    onSettled: () => refresh(true),
+  });
   const loading = checking && !data;
-  const busy = checking || console.isPending || reconfigure.isPending;
+  const busy =
+    checking || console.isPending || reconfigure.isPending || power.isPending;
+  const running = data?.state === 'Running' || data?.state === 'Paused';
+  const controllable = ['Running', 'Paused', 'Off', 'Saved'].includes(
+    data?.state ?? '',
+  );
   const p = record.baseline.profile;
   const unit = (value: number | null | undefined, suffix = ' GB') =>
     value == null ? '待读取' : `${value}${suffix}`;
@@ -132,6 +145,22 @@ export function EnvironmentPage({
           />
           {virtual && (
             <Button
+              className={styles.power}
+              disabled={busy || !controllable}
+              onClick={() => power.mutate(running ? 'stop' : 'start')}
+            >
+              {running ? <Square size={17} /> : <Play size={17} />}
+              {power.isPending
+                ? power.variables === 'stop'
+                  ? '正在停止…'
+                  : '正在启动…'
+                : running
+                  ? '停止虚拟机'
+                  : '启动虚拟机'}
+            </Button>
+          )}
+          {virtual && data?.state === 'Running' && (
+            <Button
               className={styles.console}
               disabled={busy}
               onClick={() => {
@@ -140,7 +169,7 @@ export function EnvironmentPage({
               }}
             >
               <ExternalLink size={17} />
-              {console.isPending ? '正在打开…' : '打开虚拟机'}
+              {console.isPending ? '正在打开…' : '查看桌面'}
             </Button>
           )}
           <Button
@@ -148,6 +177,7 @@ export function EnvironmentPage({
             disabled={busy}
             onClick={() => {
               reconfigure.reset();
+              setTargetRuntime(virtual);
               setSwitching(true);
             }}
           >
@@ -156,9 +186,12 @@ export function EnvironmentPage({
           </Button>
         </div>
       </WorkspacePanel>
-      {(error || console.error || data?.error) && (
+      {(error || power.error || console.error || data?.error) && (
         <p className={styles.error} role="alert">
-          {error ?? console.error?.message ?? data?.error}
+          {power.error?.message ??
+            error ??
+            console.error?.message ??
+            data?.error}
         </p>
       )}
       {consoleOpened && (
@@ -249,7 +282,7 @@ export function EnvironmentPage({
             aria-label="重新检测运行环境"
             title="重新检测"
             disabled={busy}
-            onClick={refresh}
+            onClick={() => refresh()}
           >
             <RefreshCw size={19} />
           </Button>
@@ -293,25 +326,35 @@ export function EnvironmentPage({
       </WorkspacePanel>
       {switching && (
         <DetailDialog
-          title="切换运行环境"
+          title="重新配置运行环境"
           closeLabel="取消，保留当前环境"
           locked={reconfigure.isPending}
           onClose={() => setSwitching(false)}
         >
           <p>
             当前使用 {virtual ? 'Virtual · 独立虚拟环境' : 'Native · 本机运行'}
-            ，重新配置将切换到：
+            ，请选择处理方式：
           </p>
           <label className={styles.target}>
             <Radio
               name="target-runtime"
-              value={virtual ? 'native' : 'virtual'}
-              checked
-              readOnly
+              value="current"
+              checked={targetRuntime === virtual}
+              onChange={() => setTargetRuntime(virtual)}
+            />
+            <Monitor />
+            <strong>重新验证当前 {virtual ? 'Virtual' : 'Native'} 环境</strong>
+          </label>
+          <label className={styles.target}>
+            <Radio
+              name="target-runtime"
+              value="other"
+              checked={targetRuntime !== virtual}
+              onChange={() => setTargetRuntime(!virtual)}
             />
             <Monitor />
             <strong>
-              {virtual ? 'Native · 本机运行' : 'Virtual · 独立虚拟环境'}
+              切换到 {virtual ? 'Native · 本机运行' : 'Virtual · 独立虚拟环境'}
             </strong>
           </label>
           <ul className={styles.impact}>
@@ -320,7 +363,7 @@ export function EnvironmentPage({
               先备份当前受管配置，再检查和准备目标环境；登录状态不会自动迁移。
             </li>
             <li>
-              目标环境通过验证并确认新基线后才正式切换。旧虚拟机、Profile
+              通过验证并确认新基线后才生效。现有虚拟机、Profile
               和历史基线会保留。
             </li>
           </ul>

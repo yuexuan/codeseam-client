@@ -3,6 +3,7 @@ use tauri::{Emitter, Manager};
 #[tauri::command]
 #[specta::specta]
 pub async fn workbench_operation(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Operations>,
     action: String,
     payload: String,
@@ -10,12 +11,15 @@ pub async fn workbench_operation(
     let started = Instant::now();
     let operation = format!("workbench_{}", action);
     let _guard = state.wait(&operation).await?;
+    let exit=action=="exit_prepare";
     let result =
         tokio::task::spawn_blocking(move || application::workbench::execute(action, payload))
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r);
-    finish(&operation, started, result)
+    let result=finish(&operation, started, result)?;
+    if exit && serde_json::from_str::<serde_json::Value>(&result).is_ok_and(|v|v["stopped"]==true) { app.exit(0); }
+    Ok(result)
 }
 
 /// 桌面服务负责维护此计时器，包括 WebView 最小化期间。
@@ -27,6 +31,22 @@ fn daily_check_timer() -> tokio::time::Interval {
 }
 
 pub(crate) fn start_daily_checks(app: tauri::AppHandle) {
+    let observer=app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut timer=tokio::time::interval(std::time::Duration::from_secs(3));
+        timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            timer.tick().await;
+            let state=observer.state::<Operations>();
+            let Ok(_guard)=state.0.try_lock() else { continue };
+            match tokio::task::spawn_blocking(application::workbench::guardian_poll).await {
+                Ok(Ok(Some(record))) => { let _=observer.emit("daily-observed",record); }
+                Ok(Err(error)) => { let _=observer.emit("daily-observation-error",error); }
+                Err(error) => { let _=observer.emit("daily-observation-error",error.to_string()); }
+                _ => {}
+            }
+        }
+    });
     tauri::async_runtime::spawn(async move {
         let mut timer = daily_check_timer();
         loop {

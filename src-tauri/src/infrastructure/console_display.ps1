@@ -1,4 +1,4 @@
-# 配置每台虚拟机的增强会话设置，并保留现有资源重定向选项。
+﻿# 配置每台虚拟机的增强会话设置，并保留现有资源重定向选项。
 function Save-GuestConsoleDisplay([string]$VmId, [int]$Width, [int]$Height, [string]$Directory) {
     $id = ([guid]$VmId).ToString()
     $path = Join-Path $Directory ('vmconnect.rdp.' + $id + '.config')

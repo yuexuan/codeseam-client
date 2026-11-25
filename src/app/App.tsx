@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ExitProvider } from './ExitDialog';
 import {
   QueryClient,
   QueryClientProvider,
@@ -332,13 +333,15 @@ export function App() {
     );
   return (
     <QueryClientProvider client={client}>
-      <Content
-        key={epoch}
-        onReset={() => {
-          client.clear();
-          setEpoch((value) => value + 1);
-        }}
-      />
+      <ExitProvider service={workbench} preview={preview}>
+        <Content
+          key={epoch}
+          onReset={() => {
+            client.clear();
+            setEpoch((value) => value + 1);
+          }}
+        />
+      </ExitProvider>
     </QueryClientProvider>
   );
 }

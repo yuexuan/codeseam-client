@@ -44,6 +44,7 @@ pub fn execute(input: Value) -> Result<String, String> {
         None
     };
     let result = (|| -> Result<(), String> {
+        if let Ok(Some(record))=super::workbench::load() { super::runtime_management::observe(&record,"pause_apps")?; }
         let request = json!({"root":root,"local":local,"virtual":virtual_runtime,"backup":backup,"desktop":dirs::desktop_dir()});
         let script = format!("$request = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{}')) | ConvertFrom-Json\n{}", STANDARD.encode(request.to_string()), include_str!("../infrastructure/reset.ps1"));
         let _: Value =

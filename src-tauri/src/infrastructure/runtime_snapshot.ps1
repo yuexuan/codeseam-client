@@ -42,9 +42,12 @@ $checks = @()
 $exitIp = $null
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $params = @{Uri='https://www.cloudflare.com/cdn-cgi/trace'; UseBasicParsing=$true; TimeoutSec=15}
     if (!$Virtual) { throw '本机应用代理出口由运行环境检查单独复验' }
-    $trace = (Invoke-WebRequest @params).Content
+    $trace=$null; $lastError=$null
+    foreach ($endpoint in @('https://www.cloudflare.com/cdn-cgi/trace','https://speed.cloudflare.com/cdn-cgi/trace')) {
+        try { $trace=(Invoke-WebRequest -Uri $endpoint -UseBasicParsing -TimeoutSec 8).Content; break } catch { $lastError=$_.Exception.Message }
+    }
+    if (!$trace) { throw ('Guest 出口复验未完成：' + $lastError) }
     $line = @($trace -split "`n" | Where-Object { $_.StartsWith('ip=') })
     if ($line.Count -ne 1) { throw 'Guest 出口检测响应缺少唯一 IP' }
     $exitIp = $line[0].Substring(3).Trim()

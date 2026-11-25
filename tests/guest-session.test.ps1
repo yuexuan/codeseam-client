@@ -1,4 +1,4 @@
-# 使用模拟 Guest 验证安装函数的输出，不会连接虚拟机或修改系统。
+﻿# 使用模拟 Guest 验证安装函数的输出，不会连接虚拟机或修改系统。
 $ErrorActionPreference = 'Stop'
 . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))))
 $root = Join-Path $env:TEMP 'codeseam-session-contract'

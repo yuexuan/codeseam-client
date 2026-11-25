@@ -32,6 +32,20 @@ npm run tauri dev
 
 启动页开发演示：`?preview=startup-slow&step=workbench&virtual`；失败后重试成功：`?preview=startup-retry&step=workbench&virtual`；持续失败：`?preview=startup-error&step=workbench&virtual`。节点修复成功：`?preview=node-failure&step=workbench&virtual`；节点应用失败并保留编辑器：`?preview=node-repair-error&step=workbench&virtual`。这些场景只模拟界面，不代表真实虚拟机启动或持续 Guardian 已验收。
 
+## Guardian 与虚拟机日常控制
+
+正式 Virtual Runtime 由独立宿主机计划任务与 Guest SYSTEM 计划任务持续观测，不依赖 React 页面或主窗口。宿主机每约 3 秒读取真实 Hyper-V 状态和 Guest 心跳；Guest 持续发现当前 Runtime 内的 Claude 进程树，复核发布者身份、专用 Profile、时区、TUN、DNS、IPv6 和防火墙，并周期复验真实出口。VM 关闭、保存、暂停或心跳过期时会清除旧的 Guest 在线、进程和出口证据：首页应用状态与运行环境页同步更新。
+
+Guest 守护任务意外停止或心跳长期失效时，宿主机按冷却时间自动恢复任务；重启后必须取得新心跳，才能恢复在线和守护成功状态。受控重新配置期间的禁用任务不会由持续观察循环擅自重启。
+
+运行环境页在关闭 / 保存时提供「启动虚拟机」，运行 / 暂停时提供「停止虚拟机」；停止使用正常关机，不回退为断电。查看桌面保留独立入口。启动和明确恢复时只修复 CodeSeam 自有 TUN 的新网卡默认绑定，不覆盖外部网卡 DNS / IPv6 或已发生冲突的代理配置。
+
+Guardian 为已确认身份的 Guest 应用可执行文件安装持久的直接出口阻断规则，核对全部必要子进程后才显示已受守护。代理停止或关键策略偏移时锁定新启动、关闭可识别的受影响应用、保留登录数据并记录证据；恢复操作保留原基线，需用户核对账号并通过复验。不能明确识别的进程、共享解释器及 Native 未验证路径显示未覆盖 / 覆盖受限，不会被标成已受保护，也不会为此终止普通 IDE 或终端父进程。
+
+日常关闭窗口隐藏到托盘；托盘或设置可发起完整退出。先请求正常关闭并核验应用，有残留时提供继续等待、再次确认强制结束或返回；所有受管进程退出后才停止后台守护与受管代理。Windows 登录启动偏好已持久化。守护事件单独使用 CurrentUser DPAPI 加密存储，工作台仅保留近期投影；历史支持分页、日期 / 等级 / 对象筛选和处置详情。
+
+验证记录见 [Guardian QA](guardian-qa.md)。真实页面启动 / 停止按钮、首页离线联动、Guest 守护任务自动恢复、代理故障阻断、浏览器网络复验、精确停止以及设置安全退出 / 恢复已通过。托盘菜单恢复入口、Native 完整隔离和当前未安装的 Claude Code / Desktop 真实运行不属于已通过的现场证据。
+
 ## 开发与验证
 
 ```powershell

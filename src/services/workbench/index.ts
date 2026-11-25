@@ -8,6 +8,19 @@ import {
 import { call } from '../../core/ipc/call';
 import { type BrowserResult, createBrowserPreview } from '../browser';
 import type { EnvironmentDetails } from '../runtime/environment';
+export interface AppProcess {
+  count: number;
+  installed: boolean;
+  protection?: 'covered' | 'uncovered' | 'idle';
+  instances?: {
+    id: number;
+    parentId: number;
+    root: boolean;
+    source: string;
+    covered: boolean;
+    observedAt: string;
+  }[];
+}
 export interface WorkbenchRecord {
   schema: number;
   baselineVersion?: number;
@@ -19,18 +32,32 @@ export interface WorkbenchRecord {
   baseline: BrowserResult;
   runtime: RuntimeReport | null;
   cleanup: CleanupReport;
+  guardian?: {
+    state: 'monitoring' | 'limited' | 'locked' | 'offline' | 'unknown';
+    at: string;
+    error?: string | null;
+    limitation?: string | null;
+    verifiedAt?: string | null;
+  };
   observation: {
     at: string;
     runtime: RuntimeReport | null;
     environment?: EnvironmentDetails;
     browser?: BrowserSnapshot;
-    processes: Record<
-      'code' | 'desktop' | 'web',
-      { count: number; installed: boolean }
-    > | null;
+    processes: Record<'code' | 'desktop' | 'web', AppProcess> | null;
     error: string | null;
   } | null;
-  events: { at: string; message: string; level: string }[];
+  events: {
+    id?: string;
+    at: string;
+    message: string;
+    level: string;
+    object?: string;
+    before?: unknown;
+    after?: unknown;
+    action?: string;
+    runtimeId?: string;
+  }[];
   reconfiguration?: {
     virtualRuntime: boolean;
     startedAt: string;
@@ -64,6 +91,21 @@ export interface WorkbenchService {
   refresh(scope?: CheckScope): Promise<WorkbenchRecord>;
   open(): Promise<WorkbenchRecord>;
   install(app: 'code' | 'desktop'): Promise<WorkbenchRecord>;
+  app(
+    app: 'web' | 'code' | 'desktop',
+    action: 'start' | 'stop',
+  ): Promise<WorkbenchRecord>;
+  recover(): Promise<WorkbenchRecord>;
+  prepareExit(
+    force: boolean,
+  ): Promise<{ stopped: boolean; remaining: { id: number; app: string }[] }>;
+  preferences(): Promise<{ startup: boolean; registered: boolean }>;
+  history(
+    cursor?: string,
+  ): Promise<{ events: WorkbenchRecord['events']; cursor: string | null }>;
+  setStartup(
+    enabled: boolean,
+  ): Promise<{ startup: boolean; registered: boolean }>;
 }
 async function operation(action: string, payload: unknown = {}) {
   const labels: Record<string, string> = {
@@ -112,6 +154,12 @@ export const nativeWorkbench: WorkbenchService = {
   },
   open: () => operation('open'),
   install: (app) => operation(`install_${app}`),
+  app: (app, action) => operation(`app_${action}`, { app }),
+  recover: () => operation('guardian_recover'),
+  prepareExit: (force) => operation('exit_prepare', { force }),
+  preferences: () => operation('preferences'),
+  setStartup: (enabled) => operation('startup_preference', { enabled }),
+  history: (cursor) => operation('guardian_history', { cursor }),
 };
 export function createWorkbenchPreview(
   scenario: string,
@@ -125,6 +173,45 @@ export function createWorkbenchPreview(
   let record: WorkbenchRecord | null = null;
   const save = () => sessionStorage.setItem(key, JSON.stringify(record));
   return {
+    async app(app, action) {
+      record ??= await this.read();
+      if (!record) throw new Error('请先完成初始化');
+      const processes = record.observation?.processes;
+      if (processes)
+        processes[app] = {
+          ...processes[app],
+          count: action === 'start' ? 1 : 0,
+          protection: 'uncovered',
+        };
+      save();
+      return record;
+    },
+    async recover() {
+      record ??= await this.read();
+      if (!record) throw new Error('请先完成初始化');
+      record.guardian = {
+        state: 'unknown',
+        at: new Date().toISOString(),
+        error: '开发预览：未运行真实 Guardian',
+      };
+      save();
+      return record;
+    },
+    async prepareExit() {
+      return { stopped: true, remaining: [] };
+    },
+    async preferences() {
+      return { startup: false, registered: false };
+    },
+    async history() {
+      return {
+        events: (await this.read())?.events.slice().reverse() ?? [],
+        cursor: null,
+      };
+    },
+    async setStartup(enabled) {
+      return { startup: enabled, registered: false };
+    },
     async reset(options) {
       if (!options.local && !options.virtual)
         throw new Error('请至少选择一个环境');
@@ -208,7 +295,7 @@ export function createWorkbenchPreview(
           },
           {
             at: new Date().toISOString(),
-            message: '持续 Guardian 与进程路径保护尚未接通，保护状态待验证',
+            message: '开发预览：未运行真实 Guardian，保护状态待验证',
             level: 'warning',
           },
         ],

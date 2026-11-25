@@ -28,6 +28,18 @@ try {
     if ($script:starts -ne 2 -or $script:resumes -ne 1 -or $script:closed -ne 5 -or $script:waits -ne 1) { throw 'Startup must reuse running VMs, wait for the desktop and close every session' }
     $before = Get-Content -LiteralPath $recordPath -Raw
     if ($before -notmatch $vmId) { throw 'Startup changed the checkpoint' }
+    $request.action='stop'
+    $script:stops=0
+    function Stop-VM { param($VM,$Confirm,$ErrorAction,[switch]$Force,[switch]$TurnOff) if ($Force -or $TurnOff) { throw 'Power cut is forbidden' }; $script:stops++; $script:state='Off' }
+    foreach ($state in @('Off','Running','Paused')) {
+        $script:state=$state
+        $stopped=& ([scriptblock]::Create($body)) | ConvertFrom-Json
+        if (!$stopped.stopped -or $stopped.state -ne 'Off') { throw 'Graceful shutdown did not report the real final state' }
+    }
+    if ($script:stops -ne 2) { throw 'An already stopped VM should not receive another shutdown' }
+    $script:state='Saved'
+    try { $null=& ([scriptblock]::Create($body)); throw 'Accepted shutdown of a saved VM' } catch { if ($_.Exception.Message -notlike '*Saved*') { throw } }
+    $request.action='start'; $script:state='Running'
     $request.config.profile.runtimeId = [guid]::NewGuid().ToString()
     try { $null = & ([scriptblock]::Create($body)); throw 'Accepted another VM' } catch { if ($_.Exception.Message -notlike '*正式 Runtime 不一致*') { throw } }
     if ($script:starts -ne 2) { throw 'An unowned VM was started' }

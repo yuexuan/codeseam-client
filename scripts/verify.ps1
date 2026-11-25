@@ -3,10 +3,14 @@ $root = Split-Path -Parent $PSScriptRoot
 Push-Location $root
 try {
   & "$PSScriptRoot/prepare-mihomo.ps1"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/prepare-mihomo.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Mihomo build hook regression failed' }
   npm run check
   if ($LASTEXITCODE -ne 0) { throw 'Frontend checks failed' }
   npm test
   if ($LASTEXITCODE -ne 0) { throw 'Rule tests failed' }
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guardian.test.ps1
+  if ($LASTEXITCODE -ne 0) { throw 'Guardian tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/runtime-startup.test.ps1
   if ($LASTEXITCODE -ne 0) { throw 'Runtime startup tests failed' }
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-lifecycle.test.ps1

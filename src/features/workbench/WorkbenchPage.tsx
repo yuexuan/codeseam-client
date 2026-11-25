@@ -2,6 +2,7 @@ import { Select } from '../../components/ui/Select';
 import { PanelTitle } from '../../components/layout/PanelTitle';
 import { RuntimeIdentity } from '../../components/business/RuntimeIdentity';
 import { useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   Activity,
   ArrowRight,
@@ -56,6 +57,12 @@ export function WorkbenchPage({
     environmentTitle,
     state,
     latest,
+    control,
+    recover,
+    guardian,
+    guardianTitle,
+    canLaunch,
+    offline,
   } = model;
   return (
     <>
@@ -77,7 +84,7 @@ export function WorkbenchPage({
         <div>
           <Monitor size={36} />
           <strong>{environmentTitle}</strong>
-          <span>{same ? '保护路径尚未验证' : '请核对当前环境与基线'}</span>
+          <span>{same ? '环境与正式基线一致' : '请核对当前环境与基线'}</span>
           <button
             className={styles.iconButton}
             title="环境详情"
@@ -89,8 +96,12 @@ export function WorkbenchPage({
         </div>
         <div>
           <ShieldCheck size={39} />
-          <strong>Guardian 待验证</strong>
-          <span>持续守护尚未接通</span>
+          <strong>{guardianTitle}</strong>
+          <span>
+            {guardian?.error ||
+              guardian?.limitation ||
+              '后台持续监控运行环境与进程'}
+          </span>
           <button
             className={styles.iconButton}
             title="重新检测"
@@ -112,7 +123,11 @@ export function WorkbenchPage({
                 <strong>{name}</strong>
                 <span>
                   <i
-                    className={id === 'web' && processes ? styles.readyDot : ''}
+                    className={
+                      canLaunch && processes?.[id].protection === 'covered'
+                        ? styles.readyDot
+                        : ''
+                    }
                   />
                   {state(id)}
                 </span>
@@ -122,18 +137,29 @@ export function WorkbenchPage({
                   className={`${styles.split} ${id === 'web' ? styles.primary : ''}`}
                 >
                   <button
-                    disabled={refresh.isPending || open.isPending}
+                    disabled={
+                      control.isPending ||
+                      open.isPending ||
+                      (!processes?.[id].count && !canLaunch)
+                    }
                     onClick={() =>
-                      id === 'web' || (processes && !processes[id].installed)
+                      processes && !processes[id].installed && id !== 'web'
                         ? open.mutate(id)
-                        : setDetail(name)
+                        : control.mutate({
+                            app: id,
+                            action: processes?.[id].count ? 'stop' : 'start',
+                          })
                     }
                   >
-                    {id === 'web'
-                      ? '打开'
-                      : !processes || processes[id].installed
-                        ? '查看'
-                        : '去安装'}
+                    {control.isPending && control.variables.app === id
+                      ? '处理中…'
+                      : processes?.[id].count
+                        ? '停止'
+                        : id === 'web'
+                          ? '打开'
+                          : processes?.[id].installed
+                            ? '启动'
+                            : '去安装'}
                   </button>
                   <button
                     aria-label={`${name} 更多操作`}
@@ -188,9 +214,38 @@ export function WorkbenchPage({
           <div className={styles.stats}>
             {[
               { label: '运行中实例', count: counts },
-              { label: '已受守护', count: 0 },
-              { label: '待验证', count: counts },
-              { label: '未覆盖', count: null },
+              {
+                label: '已受守护',
+                count: processes
+                  ? Object.values(processes).reduce(
+                      (sum, app) =>
+                        sum +
+                        (canLaunch && app.protection === 'covered'
+                          ? app.count
+                          : 0),
+                      0,
+                    )
+                  : null,
+              },
+              {
+                label: '待验证',
+                count: processes
+                  ? Object.values(processes).reduce(
+                      (sum, app) => sum + (!app.protection ? app.count : 0),
+                      0,
+                    )
+                  : null,
+              },
+              {
+                label: '未覆盖',
+                count: processes
+                  ? Object.values(processes).reduce(
+                      (sum, app) =>
+                        sum + (app.protection === 'uncovered' ? app.count : 0),
+                      0,
+                    )
+                  : null,
+              },
             ].map(({ label, count }) => (
               <div key={label}>
                 <span>{label}</span>
@@ -222,7 +277,7 @@ export function WorkbenchPage({
           <ul>
             <li>
               <CircleAlert />
-              Guardian 未接通，保护状态待验证
+              {guardian?.error || guardian?.limitation || guardianTitle}
             </li>
             <li>
               <CircleAlert />
@@ -243,9 +298,19 @@ export function WorkbenchPage({
             </li>
             <li>
               <CircleAlert />
-              发现进程后仍需验证真实网络路径
+              {offline
+                ? 'Guest 离线，Claude 应用启动已暂停'
+                : '仅有全部必要子进程规则通过时显示已受守护'}
             </li>
           </ul>
+          {guardian?.state === 'locked' && (
+            <Button
+              disabled={recover.isPending}
+              onClick={() => setDetail('恢复 Guardian')}
+            >
+              {recover.isPending ? '正在复验…' : '恢复原基线并复验'}
+            </Button>
+          )}
         </WorkspacePanel>
       </div>
       <WorkspacePanel className={styles.events}>
@@ -285,8 +350,29 @@ export function WorkbenchPage({
       </WorkspacePanel>
       {detail && (
         <DetailDialog title={detail} onClose={() => setDetail('')}>
-          {detail === '全部守护记录' ? (
-            <EventHistory events={record.events} />
+          {detail === '恢复 Guardian' ? (
+            <>
+              <p>{guardian?.error}</p>
+              <p>
+                请先恢复原节点、DNS、时区和受管网络。此操作保留正式基线和登录数据，重新核对后才解除锁定。
+              </p>
+              <p>
+                如实际出口曾变化，请重新核对当前 Claude
+                账号。无法恢复时可从运行环境进入重新配置；建议至少等待 24
+                小时仅为保守建议，等待不会自动恢复保护。
+              </p>
+              <Button
+                disabled={recover.isPending}
+                onClick={() => {
+                  recover.mutate();
+                  setDetail('');
+                }}
+              >
+                已核对账号，按原基线复验
+              </Button>
+            </>
+          ) : detail === '全部守护记录' ? (
+            <EventHistory events={record.events} load={model.history} />
           ) : detail.startsWith('Claude Code') ||
             detail.startsWith('Claude Desktop') ? (
             <>
@@ -297,8 +383,21 @@ export function WorkbenchPage({
                 · 当前正式 Runtime：{p.runtime}
               </p>
               <p>
-                应用进程的启动、停止与真实网络路径保护尚未接通，发现进程不代表已受守护。
+                {guardian?.error ||
+                  guardian?.limitation ||
+                  'Guardian 持续发现当前 Runtime 中的 Claude 进程，逐个核对必要子进程的网络规则。'}
               </p>
+              {(
+                processes?.[
+                  detail.startsWith('Claude Code') ? 'code' : 'desktop'
+                ].instances ?? []
+              ).map((instance) => (
+                <p key={instance.id}>
+                  PID {instance.id} · 来源 {instance.source} ·{' '}
+                  {instance.covered && canLaunch ? '已受守护' : '未覆盖'} ·
+                  最近观测 {formatTime(instance.observedAt)}
+                </p>
+              ))}
               <p>可通过专用浏览器访问官方安装入口；安装完成后重新检测。</p>
               <Button
                 disabled={open.isPending}
@@ -377,7 +476,8 @@ export function WorkbenchPage({
                 )}
               </dl>
               <p>
-                以上初始化证据不会自动覆盖正式基线。持续守护和进程保护路径尚未验收，当前不能据此判定已受保护。
+                正式基线不会被巡检自动覆盖。
+                {guardian?.error || guardian?.limitation || guardianTitle}
               </p>
               {observation?.error && (
                 <p role="alert" className={styles.error}>
@@ -394,12 +494,21 @@ export function WorkbenchPage({
                 </p>
               ))}
               {detail.startsWith('Claude Web') && (
-                <Button
-                  onClick={() => open.mutate('web')}
-                  disabled={open.isPending}
-                >
-                  打开 Claude Web
-                </Button>
+                <>
+                  {(processes?.web.instances ?? []).map((instance) => (
+                    <p key={instance.id}>
+                      PID {instance.id} · 来源 {instance.source} ·{' '}
+                      {instance.covered && canLaunch ? '已受守护' : '未覆盖'} ·
+                      最近观测 {formatTime(instance.observedAt)}
+                    </p>
+                  ))}
+                  <Button
+                    onClick={() => open.mutate('web')}
+                    disabled={open.isPending}
+                  >
+                    打开 Claude Web
+                  </Button>
+                </>
               )}
             </>
           )}
@@ -408,8 +517,37 @@ export function WorkbenchPage({
     </>
   );
 }
-function EventHistory({ events }: { events: WorkbenchRecord['events'] }) {
+function EventHistory({
+  events,
+  load,
+}: {
+  events: WorkbenchRecord['events'];
+  load: (
+    cursor?: string,
+  ) => Promise<{ events: WorkbenchRecord['events']; cursor: string | null }>;
+}) {
   const [level, setLevel] = useState('all');
+  const [day, setDay] = useState('');
+  const [object, setObject] = useState('all');
+  const history = useInfiniteQuery({
+    queryKey: ['guardian-history'],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => load(pageParam),
+    getNextPageParam: (last) => last.cursor ?? undefined,
+    staleTime: 0,
+  });
+  const archived = history.data?.pages.flatMap((page) => page.events) ?? [];
+  const entries = archived.length
+    ? [...events.slice(-7).reverse(), ...archived]
+    : events.slice().reverse();
+  const unique = [
+    ...new Map(
+      entries.map((event) => [
+        event.id ?? `${event.at}-${event.message}`,
+        event,
+      ]),
+    ).values(),
+  ];
   return (
     <>
       <label className={styles.filter}>
@@ -421,18 +559,67 @@ function EventHistory({ events }: { events: WorkbenchRecord['events'] }) {
           <option value="info">信息</option>
         </Select>
       </label>
+      <label className={styles.filter}>
+        日期{' '}
+        <input
+          type="date"
+          value={day}
+          onChange={(event) => setDay(event.target.value)}
+        />
+      </label>
+      <label className={styles.filter}>
+        对象{' '}
+        <Select
+          value={object}
+          onChange={(event) => setObject(event.target.value)}
+        >
+          <option value="all">全部</option>
+          <option value="runtime">运行环境</option>
+          <option value="process">应用进程</option>
+        </Select>
+      </label>
       <ol className={styles.history}>
-        {events
+        {unique
           .filter((event) => level === 'all' || event.level === level)
-          .slice()
-          .reverse()
+          .filter((event) => object === 'all' || event.object === object)
+          .filter(
+            (event) =>
+              !day ||
+              new Date(
+                /^\d+$/.test(event.at) ? Number(event.at) * 1000 : event.at,
+              ).toLocaleDateString('sv-SE') === day,
+          )
           .map((event, index) => (
             <li key={index}>
               <time>{formatTime(event.at)}</time>
               <span>{event.message}</span>
+              {event.id && (
+                <details>
+                  <summary>查看处置证据</summary>
+                  <p>
+                    事件 {event.id} · 对象 {event.object} · 动作 {event.action}
+                  </p>
+                  <pre>
+                    {JSON.stringify(
+                      { before: event.before, after: event.after },
+                      null,
+                      2,
+                    )}
+                  </pre>
+                </details>
+              )}
             </li>
           ))}
       </ol>
+      {history.error && <p role="alert">{history.error.message}</p>}
+      {history.hasNextPage && (
+        <Button
+          disabled={history.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
+        >
+          {history.isFetchingNextPage ? '正在读取…' : '加载更早记录'}
+        </Button>
+      )}
     </>
   );
 }

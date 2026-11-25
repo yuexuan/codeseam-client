@@ -3,7 +3,25 @@ use crate::infrastructure::{vault, windows};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
 
+pub fn app_action(record: &Value, operation: &str, kind: &str, force: bool) -> Result<Value,String> {
+    let library=STANDARD.encode(include_str!("../infrastructure/guardian_agent.ps1"));
+    let body=include_str!("../infrastructure/guardian_apps.ps1").replace("# GUARDIAN_LIBRARY", &format!(". ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{library}'))))"));
+    let args=STANDARD.encode(json!({"profile":record["baseline"]["profile"],"virtualRuntime":record["virtualRuntime"],"operation":operation,"kind":kind,"force":force}).to_string());
+    let script=format!("$argsData=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{args}')) | ConvertFrom-Json\n& {{ {body} }} $argsData.profile $argsData.virtualRuntime $argsData.operation $argsData.kind $argsData.force");
+    if record["virtualRuntime"] == true {
+        return serde_json::from_str(&super::virtual_runtime::execute("pause_apps".into(),json!({"profile":record["baseline"]["profile"],"script":script}).to_string())?).map_err(|e|e.to_string());
+    }
+    windows::run_script(format!("$result=& {{ {script} }}\n$result | ConvertTo-Json -Depth 15 -Compress").as_bytes())
+}
+
 pub fn observe(record: &Value, action: &str) -> Result<Value, String> {
+    if action=="pause_apps" {
+        let result=app_action(record,"stop","",true)?;
+        if result["stopped"]!=true { return Err("仍有身份无法确认的进程，未暂停守护，请先保存并手动关闭后重试".into()) }
+        app_action(record,"suspend","",false)?;
+        super::guardian::stop(record)?;
+        return Ok(result)
+    }
     let profile = &record["baseline"]["profile"];
     let snapshot_script = if action == "read_browser" {
         include_str!("../infrastructure/daily_browser.ps1").to_string()
@@ -73,9 +91,6 @@ pub fn begin(record: &mut Value, input: &Value) -> Result<(), String> {
     let target = input["virtualRuntime"]
         .as_bool()
         .ok_or("缺少目标运行环境")?;
-    if record["virtualRuntime"] == target {
-        return Err("请选择另一种运行环境；日常维护无需重新配置".into());
-    }
     // 任何准备操作前，先保留不可变的正式基线和 Native 检查点。
     let backup = format!(
         "RuntimeHistory/{}",
@@ -139,6 +154,8 @@ mod tests {
         let old = json!({"virtualRuntime":true,"reconfiguration":{"virtualRuntime":false}});
         assert!(validate_confirmation(Some(&old), Some(true)).is_err());
         assert!(validate_confirmation(Some(&old), Some(false)).is_ok());
+        let same=json!({"virtualRuntime":true,"reconfiguration":{"virtualRuntime":true}});
+        assert!(validate_confirmation(Some(&same),Some(true)).is_ok());
         assert_eq!(old["virtualRuntime"], true);
     }
     #[test]

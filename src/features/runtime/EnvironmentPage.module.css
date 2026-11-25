@@ -66,6 +66,12 @@
   font-size: 0.98rem;
   font-weight: 400;
 }
+.actions .power {
+  color: var(--brand);
+  border-color: var(--brand);
+  box-shadow: none;
+  white-space: nowrap;
+}
 .actions .reconfigure {
   color: var(--brand);
   border-color: var(--brand);

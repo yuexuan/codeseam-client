@@ -75,7 +75,7 @@ function Open-GuestConsole([string]$VmId, [int]$TimeoutSeconds = 20) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 }
-if ($request.action -in @('observe', 'start', 'open_console', 'pause_apps', 'unlock_apps', 'repair_node')) {
+if ($request.action -in @('observe', 'start', 'stop', 'open_console', 'pause_apps', 'unlock_apps', 'repair_node')) {
     # DAILY_RUNTIME
     return
 }

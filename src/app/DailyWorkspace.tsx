@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAppExit } from './ExitDialog';
 import {
   WorkspaceShell,
   type WorkspaceDestination,
@@ -47,6 +48,7 @@ export function DailyWorkspace({
   onRepaired: (record: WorkbenchRecord) => void;
 }) {
   const model = useWorkbench(initial, service);
+  const showExit = useAppExit();
   const runtimeData = model.observation?.environment;
   const browserSnapshot = model.observation?.browser;
   const [nodesBusy, setNodesBusy] = useState(false);
@@ -96,7 +98,7 @@ export function DailyWorkspace({
       navigationLocked={nodesBusy}
       footer={
         <WorkspaceStatusBar
-          status="守护待验证"
+          status={model.guardianTitle}
           lastChecked={
             page === '运行环境'
               ? formatTime(runtimeData?.at)
@@ -116,6 +118,12 @@ export function DailyWorkspace({
           onReset={onReset}
           onBack={() => navigate('工作台')}
           lastChecked={formatTime(model.lastAt)}
+          onExit={showExit}
+          guardianTitle={model.guardianTitle}
+          onCheck={() => {
+            model.refresh.mutate();
+            navigate('工作台');
+          }}
         />
       ) : page === '运行环境' ? (
         <EnvironmentPage
@@ -125,7 +133,9 @@ export function DailyWorkspace({
           data={runtimeData}
           checking={model.refresh.isPending}
           error={model.refresh.error?.message ?? model.observation?.error}
-          refresh={() => model.refresh.mutate('runtime')}
+          refresh={(includeBrowser) =>
+            model.refresh.mutate(includeBrowser ? 'all' : 'runtime')
+          }
         />
       ) : page === '专用浏览器' ? (
         <DailyBrowserPage

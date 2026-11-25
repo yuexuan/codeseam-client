@@ -1,4 +1,6 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
+# Tauri 从 PowerShell 7 启动 Windows PowerShell 时，需使用当前宿主的系统模块目录。
+$env:PSModulePath = Join-Path $PSHOME 'Modules'
 $root = Split-Path $PSScriptRoot -Parent
 $target = Join-Path $root 'src-tauri/resources/mihomo.exe'
 if ((Test-Path $target) -and (Get-FileHash $target -Algorithm SHA256).Hash -eq '5A0231811A80B27477EBDEE15684B41946D01AFBD2114534E9A4B256125CA147') { return }

@@ -315,10 +315,19 @@
   list-style: none;
 }
 .history li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
   gap: 1rem;
   padding: 0.7rem 0;
   border-bottom: 1px solid var(--line);
+}
+.history details {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+.history pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .spinning {
   animation: spin 1s linear infinite;

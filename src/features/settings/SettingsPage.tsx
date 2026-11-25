@@ -2,6 +2,7 @@ import { Checkbox } from '../../components/ui/Checkbox';
 import { ResetEnvironment } from './ResetEnvironment';
 import type { WorkbenchService } from '../../services/workbench';
 import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
   Archive,
@@ -20,7 +21,6 @@ import { WorkspaceHeader } from '../../components/layout/WorkspaceHeader';
 import { SettingGroup, SettingRow } from '../../components/layout/SettingGroup';
 import { Switch } from '../../components/ui/Switch';
 import { Button } from '../../components/ui/Button';
-import { DetailDialog } from '../../components/ui/DetailDialog';
 import styles from './SettingsPage.module.css';
 
 type Section =
@@ -41,6 +41,9 @@ export function SettingsPage({
   onReset,
   onBack,
   lastChecked,
+  onExit,
+  guardianTitle,
+  onCheck,
 }: {
   service: WorkbenchService;
   virtualRuntime: boolean;
@@ -48,13 +51,23 @@ export function SettingsPage({
   onReset: () => void;
   onBack: () => void;
   lastChecked: string;
+  onExit: () => void;
+  guardianTitle: string;
+  onCheck: () => void;
 }) {
   const [section, setSection] = useState<Section>('overview');
-  // 仅用于界面展示的偏好，不会写入真实 Windows 或 Guardian 状态。
-  const [startup, setStartup] = useState(true);
+  const preferences = useQuery({
+    queryKey: ['preferences'],
+    queryFn: () => service.preferences(),
+  });
+  const startupMutation = useMutation({
+    mutationFn: (enabled: boolean) => service.setStartup(enabled),
+    onSuccess: () => preferences.refetch(),
+  });
+  const startup = preferences.data?.startup ?? false;
+  const setStartup = (enabled: boolean) => startupMutation.mutate(enabled);
   const [minorNotifications, setMinorNotifications] = useState(false);
   const [routineNotifications, setRoutineNotifications] = useState(true);
-  const [exitPreview, setExitPreview] = useState(false);
   const [backupScope, setBackupScope] = useState([
     'preferences',
     'nodes',
@@ -72,10 +85,16 @@ export function SettingsPage({
         <span className={styles.headerNote}>CodeSeam 偏好与本地数据</span>
       </WorkspaceHeader>
       <div className={styles.page} key={section}>
+        {(preferences.error || startupMutation.error) && (
+          <p role="alert">
+            {startupMutation.error?.message ?? preferences.error?.message}
+          </p>
+        )}
         <p className={styles.preview}>
           <Info size={18} />
           <span>
-            <strong>设置说明</strong> · 环境重置已接通；其余偏好仍为界面预览。
+            <strong>设置说明</strong> ·
+            开机启动、后台守护、完整退出和环境重置已接通；备份导出和通知偏好仍待接入。
           </span>
         </p>
         {section === 'overview' && (
@@ -83,7 +102,7 @@ export function SettingsPage({
             <SettingGroup title="常规" icon={Settings}>
               <SettingRow
                 title="登录 Windows 时启动 CodeSeam"
-                description="日常启动偏好；实际启动状态将在接通后显示。"
+                description="登录后启动后台工作台，恢复正式环境并开始复验。"
               >
                 <span>{startup ? '开启' : '关闭'}</span>
                 <Switch
@@ -106,7 +125,7 @@ export function SettingsPage({
               >
                 <span className={styles.pending}>
                   <CircleAlert size={17} />
-                  守护待验证
+                  {guardianTitle}
                 </span>
               </SettingRow>
             </SettingGroup>
@@ -161,24 +180,24 @@ export function SettingsPage({
               </SettingRow>
               <SettingRow
                 title="实际启动状态"
-                description="启动项与最近后台启动结果尚未读取。"
+                description="当前用户的 Windows 登录启动项。"
               >
-                待接通
+                {preferences.data?.registered ? '已注册' : '未注册'}
               </SettingRow>
               <SettingRow title="最近一次环境检测">{lastChecked}</SettingRow>
             </SettingGroup>
             <SettingGroup title="窗口与系统托盘" icon={Monitor}>
               <SettingRow
                 title="关闭窗口后"
-                description="设计行为：隐藏到系统托盘，继续后台守护。"
+                description="日常模式下隐藏到系统托盘，Guardian 继续运行。"
               >
-                待接通
+                后台运行
               </SettingRow>
               <SettingRow
                 title="当前版本行为"
-                description="系统托盘尚未接通，点击窗口关闭仍会退出当前应用。"
+                description="可从系统托盘重新打开工作台，或从此处完整退出。"
               >
-                关闭即退出
+                关闭时隐藏
               </SettingRow>
             </SettingGroup>
             <SettingGroup title="完整退出" icon={Power}>
@@ -186,9 +205,7 @@ export function SettingsPage({
                 title="退出 CodeSeam"
                 description="退出前需确认关闭 Claude 相关应用，再停止后台守护。"
               >
-                <Button onClick={() => setExitPreview(true)}>
-                  预览退出确认
-                </Button>
+                <Button onClick={onExit}>退出 CodeSeam</Button>
               </SettingRow>
             </SettingGroup>
           </>
@@ -198,27 +215,25 @@ export function SettingsPage({
             <SettingGroup title="守护状态" icon={ShieldCheck}>
               <SettingRow
                 title="Guardian"
-                description="持续守护尚未接通，不能据此判断应用已受保护。"
+                description="后台持续复验 Runtime、受管网络及 Claude 进程；窗口隐藏时继续运行。"
               >
                 <span className={styles.pending}>
                   <CircleAlert size={17} />
-                  待验证
+                  {guardianTitle}
                 </span>
               </SettingRow>
               <SettingRow
-                title="计划监控范围"
+                title="当前监控范围"
                 description="当前运行环境、节点与代理、专用浏览器、可识别的 Claude 应用。"
               >
-                待验证
+                当前正式 Runtime
               </SettingRow>
               <SettingRow title="最近一次环境检测">{lastChecked}</SettingRow>
               <SettingRow
                 title="立即深度扫描"
                 description="只读取与验证环境，发现问题后由你决定下一步。"
               >
-                <Button disabled title="深度扫描尚未接通">
-                  开始扫描
-                </Button>
+                <Button onClick={onCheck}>开始扫描</Button>
               </SettingRow>
             </SettingGroup>
             <SettingGroup title="通知偏好" icon={Bell}>
@@ -407,23 +422,6 @@ export function SettingsPage({
           节点、运行环境与专用浏览器的配置，请从左侧对应入口管理。
         </p>
       </div>
-      {exitPreview && (
-        <DetailDialog
-          title="退出 CodeSeam？"
-          closeLabel="返回设置"
-          onClose={() => setExitPreview(false)}
-        >
-          <p>
-            完整退出将先请求关闭可识别的 Claude
-            相关应用，再停止后台守护。请先保存正在进行的工作。
-          </p>
-          <p>若有应用无法正常关闭，将暂停退出并提示你处理。</p>
-          <p>当前仅预览确认样式，进程关闭与退出流程尚未接通。</p>
-          <div className={styles.dialogActions}>
-            <Button disabled>关闭相关应用并退出</Button>
-          </div>
-        </DetailDialog>
-      )}
     </>
   );
 }

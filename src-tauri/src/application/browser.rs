@@ -12,7 +12,7 @@ pub fn execute(virtual_runtime: bool, browser: String, action: String) -> Result
     if !["", "edge", "chrome"].contains(&browser.as_str()) {
         return Err("不支持的浏览器".into());
     }
-    let runtime_locked = super::workbench::load()?.is_some_and(|record| record["reconfiguration"].is_object() || record["nodeRepair"].is_object() || record["virtualRuntime"] != virtual_runtime);
+    let runtime_locked = super::workbench::load()?.is_some_and(|record| record["reconfiguration"].is_object() || record["nodeRepair"].is_object() || record["virtualRuntime"] != virtual_runtime || super::guardian::allows_launch(&record).is_err());
     if runtime_locked && ["open", "install_code", "install_desktop"].contains(&action.as_str()) {
         return Err("该运行环境尚未成为正式 Runtime，请完成或取消重新配置后再打开 Claude".into());
     }

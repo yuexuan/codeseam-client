@@ -25,6 +25,11 @@ if ($request.action -eq 'start') {
                     $task = Get-ScheduledTask -TaskName 'CodeSeam-Network' -ErrorAction Stop
                     if ($task.State -ne 'Running') { Start-ScheduledTask -TaskName 'CodeSeam-Network' -ErrorAction Stop; throw '正在启动受管代理' }
                     if ((Get-NetAdapter -Name 'CodeSeam-TUN' -ErrorAction Stop).Status -ne 'Up') { throw '受管网络正在连接' }
+                    # 重启后重新创建的 Wintun 网卡会继承 Windows 默认设置。
+                    # 仅恢复自有网卡，不覆盖外部网卡的配置偏移。
+                    Get-NetAdapterBinding -Name 'CodeSeam-TUN' -ComponentID ms_tcpip6 -ErrorAction Stop | Where-Object Enabled | Disable-NetAdapterBinding -ErrorAction Stop | Out-Null
+                    $tun=Get-NetAdapter -Name 'CodeSeam-TUN' -ErrorAction Stop
+                    Set-DnsClientServerAddress -InterfaceIndex $tun.ifIndex -ServerAddresses '198.18.0.2' -ErrorAction Stop
                 } -ErrorAction Stop | Out-Null
                 @{ready=$true; name=$vm.Name; state='Running'} | ConvertTo-Json -Compress
                 return
@@ -36,6 +41,17 @@ if ($request.action -eq 'start') {
         } while ([DateTime]::UtcNow -lt $deadline)
         throw ('虚拟机已请求启动，但 120 秒内未就绪：' + $lastError + '。请打开虚拟机窗口检查后重试。')
     } finally { if ($session) { Remove-PSSession $session } }
+}
+if ($request.action -eq 'stop') {
+    if ($vm.State -eq 'Off') { @{stopped=$true;state='Off'} | ConvertTo-Json -Compress; return }
+    if ($vm.State -eq 'Paused') { Resume-VM -VM $vm -ErrorAction Stop | Out-Null; $vm=Get-VM -Id ([guid]$record.vmId) -ErrorAction Stop }
+    if ($vm.State -ne 'Running') { throw ('虚拟机当前无法正常关机：' + $vm.State + '。请先启动或恢复后再停止。') }
+    # 请求 Guest 操作系统正常关机，不回退为断电操作。
+    Stop-VM -VM $vm -Confirm:$false -ErrorAction Stop | Out-Null
+    $vm=Get-VM -Id ([guid]$record.vmId) -ErrorAction Stop
+    if ($vm.State -ne 'Off') { throw ('虚拟机关机尚未完成，当前状态：' + $vm.State) }
+    @{stopped=$true;state='Off'} | ConvertTo-Json -Compress
+    return
 }
 if ($request.action -eq 'open_console') {
     $consoleId = Open-GuestConsole $record.vmId

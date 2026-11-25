@@ -9,7 +9,7 @@ fn controller_script() -> String {
         .replace("# GUEST_BROWSER", include_str!("../infrastructure/guest_browser.ps1").trim_start_matches('\u{feff}'))
         .replace("# DAILY_RUNTIME", include_str!("../infrastructure/daily_virtual_runtime.ps1"))
         .replace("# NODE_REPAIR", include_str!("../infrastructure/node_repair.ps1"))
-        .replace("# CONSOLE_DISPLAY", include_str!("../infrastructure/console_display.ps1"))
+        .replace("# CONSOLE_DISPLAY", include_str!("../infrastructure/console_display.ps1").trim_start_matches('\u{feff}'))
 }
 
 pub fn execute(action: String, payload: String) -> Result<String, String> {
@@ -43,6 +43,7 @@ pub fn execute(action: String, payload: String) -> Result<String, String> {
         "ensure_ready",
         "observe",
         "start",
+        "stop",
         "open_console",
         "pause_apps",
         "unlock_apps",

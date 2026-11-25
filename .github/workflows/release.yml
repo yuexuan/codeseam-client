@@ -18,21 +18,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - run: ./scripts/prepare-mihomo.ps1
       - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-lifecycle.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-close.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-version.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/browser-launch.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-session.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-timezone.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-console.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/console-window.test.ps1
-      - run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/guest-controller.test.ps1
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
-      - run: npm run bindings:check
+      # 本地与 CI 共用完整回归入口，包含打包钩子的模块路径检查。
+      - run: ./scripts/verify.ps1
       - run: npm run tauri -- build --bundles nsis
       - uses: actions/upload-artifact@v4
         with:

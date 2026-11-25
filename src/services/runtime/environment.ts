@@ -25,6 +25,7 @@ export interface EnvironmentDetails {
 }
 export interface RuntimeEnvironmentService {
   start(): Promise<void>;
+  stop(): Promise<void>;
   read(): Promise<EnvironmentDetails>;
   openConsole(): Promise<void>;
   repairNode(): Promise<WorkbenchRecord>;
@@ -44,6 +45,7 @@ async function operation<T>(action: string, payload: object = {}): Promise<T> {
 }
 export const nativeRuntimeEnvironment: RuntimeEnvironmentService = {
   start: () => operation('runtime_start'),
+  stop: () => operation('runtime_stop'),
   read: () => operation('runtime_details'),
   openConsole: () => operation('runtime_console'),
   repairNode: () => operation('node_repair'),
@@ -58,6 +60,7 @@ export function createRuntimeEnvironmentPreview(
   nodes?: NodesService,
 ): RuntimeEnvironmentService {
   let started = false;
+  let stopped = false;
   let attempts = 0;
   let nodeRepaired = false;
   const update = async (virtualRuntime?: boolean) => {
@@ -128,6 +131,12 @@ export function createRuntimeEnvironmentPreview(
           '虚拟机启动失败，请检查 Hyper-V 服务和可用内存后重试。',
         );
       started = true;
+      stopped = false;
+    },
+    async stop() {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      stopped = true;
+      started = false;
     },
     async read() {
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -138,7 +147,7 @@ export function createRuntimeEnvironmentPreview(
       const failed =
         !nodeRepaired &&
         ['failure', 'node-failure', 'node-repair-error'].includes(scenario);
-      const offline = scenario === 'runtime-offline' && !started;
+      const offline = stopped || (scenario === 'runtime-offline' && !started);
       const virtual = record.virtualRuntime;
       return {
         at: new Date().toISOString(),

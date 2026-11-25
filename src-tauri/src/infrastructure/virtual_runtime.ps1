@@ -111,7 +111,7 @@ try {
             Save-Checkpoint $record
             $record | ConvertTo-Json -Depth 10 -Compress
         }
-        { $_ -in @('browser_prepare', 'ensure_ready', 'observe', 'start', 'open_console', 'pause_apps', 'unlock_apps', 'repair_node') } {
+        { $_ -in @('browser_prepare', 'ensure_ready', 'observe', 'start', 'stop', 'open_console', 'pause_apps', 'unlock_apps', 'repair_node') } {
             # GUEST_BROWSER
         }
         'initialize' {

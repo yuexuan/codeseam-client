@@ -8,6 +8,9 @@ pub(crate) mod runtime;
 pub(crate) mod runtime_management;
 pub(crate) mod state;
 pub(crate) mod workbench;
+pub(crate) mod guardian;
+mod guardian_events;
+mod lifecycle;
 use crate::{
     domain::{Report, ScanPhase},
     infrastructure::windows,

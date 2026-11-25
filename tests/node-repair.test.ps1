@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $source = Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('codeseam-node-repair-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $directory
