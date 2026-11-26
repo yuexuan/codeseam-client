@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference='Stop'
-$source=Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
-. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'guardian_agent.ps1'))))
+$source=Join-Path $PSScriptRoot '../src-tauri/src/platform/windows'
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'guardian/guardian_agent.ps1'))))
 function Assert($Condition,[string]$Message) { if (!$Condition) { throw $Message } }
 # 此处隔离身份识别逻辑，签名验证由真实 Guest 测试覆盖。
 function Test-GuardianIdentity([string]$Path,[string]$Kind) { $Path -like 'C:\Trusted\*' }
@@ -53,7 +53,7 @@ try {
     $script:browserVersion='1.0'
     $health=Get-GuardianHealth @{virtualRuntime=$false;profile=$profile} $manifest $false
     Assert (@($health.checks | Where-Object id -eq 'browser').Count -eq 1) 'The matching current profile must produce an actual check'
-    $snapshotAst=[scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'runtime_snapshot.ps1'))).Ast
+    $snapshotAst=[scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'runtime/runtime_snapshot.ps1'))).Ast
     $exitProbe=$snapshotAst.EndBlock.Statements | Where-Object {$_ -is [Management.Automation.Language.TryStatementAst] -and $_.Body.Extent.Text.Contains('Invoke-WebRequest')} | Select-Object -First 1
     if (!$exitProbe) { throw 'Missing production exit probe' }
     $Virtual=$true; $Profile=@{nodeName='fixture';verification=@{exitIp='192.0.2.1'}}
@@ -70,7 +70,7 @@ try {
     $statusPath=Join-Path $fixture 'status.json'
     Write-GuardianJson $statusPath @{state='verified'}
     Assert ($script:publishAttempts -eq 2 -and (Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json).state -eq 'verified') 'A transient sharing violation must not kill status publication'
-    foreach ($name in @('guardian_host.ps1','guardian_control.ps1','guardian_apps.ps1')) { $null=[scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source $name))) }
+    foreach ($name in @('guardian/guardian_host.ps1','guardian/guardian_control.ps1','guardian/guardian_apps.ps1')) { $null=[scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source $name))) }
     'PASS: process trees, external sources, identity, PID reuse, rule reuse/conflict, shared interpreters and UTC heartbeat'
 } finally {
     $resolved=[IO.Path]::GetFullPath((Resolve-Path -LiteralPath $fixture).Path)

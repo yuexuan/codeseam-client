@@ -1,8 +1,10 @@
-$ErrorActionPreference = 'Stop'
-$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/reset.ps1'))
+﻿$ErrorActionPreference = 'Stop'
+$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/environment/reset.ps1'))
 $ast = [scriptblock]::Create($source).Ast
 # 在进程内通过模拟 Hyper-V 验证控制器，不提权，也不操作真实虚拟机。
 $elevation = $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if (!$admin') } | Select-Object -First 1
+if (!$elevation) { throw 'Missing elevation branch in reset fixture' }
+function Start-Process { throw 'Isolated reset test cannot invoke a child process' }
 $source = $source.Remove($elevation.Extent.StartOffset, $elevation.Extent.EndOffset - $elevation.Extent.StartOffset)
 $controller = [scriptblock]::Create($source)
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('codeseam-reset-test-' + [guid]::NewGuid().ToString('N'))

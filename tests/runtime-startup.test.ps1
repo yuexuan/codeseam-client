@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
-$source = Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
-$body = [IO.File]::ReadAllText((Join-Path $source 'daily_virtual_runtime.ps1'))
+$source = Join-Path $PSScriptRoot '../src-tauri/src/platform/windows'
+$body = [IO.File]::ReadAllText((Join-Path $source 'hyperv/daily_virtual_runtime.ps1'))
 $testRoot = Join-Path $env:TEMP ('codeseam-startup-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $testRoot
 $root = $testRoot
@@ -50,7 +50,7 @@ try {
     try { $null = & ([scriptblock]::Create($body)); throw 'Accepted failed Guest readiness' } catch { if ($_.Exception.Message -ne 'Fixture timeout') { throw } }
     if ($script:closed -ne $closedBefore + 1) { throw 'A failed readiness probe leaked its session' }
     if ((Get-Content -LiteralPath $recordPath -Raw) -ne $before) { throw 'Startup modified the formal VM checkpoint' }
-    $processBody = [IO.File]::ReadAllText((Join-Path $source 'workbench.ps1'))
+    $processBody = [IO.File]::ReadAllText((Join-Path $source 'runtime/workbench.ps1'))
     $profilePath = 'C:\Users\CodeSeam\AppData\Local\CodeSeam\Browser\guest\edge\User Data'
     function Get-CimInstance {
         param($ClassName,$Filter)

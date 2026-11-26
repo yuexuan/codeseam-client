@@ -1,6 +1,6 @@
 ﻿# 使用内存中的操作系统状态验证正式检测器，不会修改系统设置。
 $ErrorActionPreference='Stop'
-$detector=Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/runtime.ps1') -Raw -Encoding UTF8
+$detector=Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/runtime/runtime.ps1') -Raw -Encoding UTF8
 $script:zone='Singapore Standard Time'; $script:sync=$true; $script:v6=$false; $script:trusted=$true; $script:resolves=$true; $script:nrpt=$false
 function Get-TimeZone { [pscustomobject]@{Id=$script:zone} }
 function Get-UICulture { [pscustomobject]@{NativeName='English';Name='en-US';TwoLetterISOLanguageName='en'} }

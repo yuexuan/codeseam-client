@@ -1,6 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Join-Path $env:TEMP ('codeseam-browser-lifecycle-' + [guid]::NewGuid().ToString('N'))
-$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'))
+$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser.ps1'))
 # 生命周期测试不会访问发行服务，也不会在测试机器上安装软件。
 $ast = [Management.Automation.Language.Parser]::ParseInput($body, [ref]$null, [ref]$null)
 $versionFunction = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Ensure-BrowserVersion'}, $false)
@@ -77,6 +77,6 @@ $mismatch = & ([scriptblock]::Create($body)) | ConvertFrom-Json
 if ($mismatch.profile.timezoneStatus -ne 'pending' -or $mismatch.profile.parametersStatus -eq 'satisfied' -or $mismatch.profile.baselineStatus -eq 'satisfied' -or !$mismatch.profile.verificationError) { throw 'Wrong browser timezone must not produce a successful baseline' }
 if ((Get-Content -LiteralPath $sentinel) -ne 'preserve') { throw 'Timezone repair must preserve login data' }
 $parseErrors = $null
-$null = [Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser_worker.ps1')), [ref]$null, [ref]$parseErrors)
+$null = [Management.Automation.Language.Parser]::ParseInput([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser_worker.ps1')), [ref]$null, [ref]$parseErrors)
 if ($parseErrors) { throw ($parseErrors | Out-String) }
 'PASS: candidate, failed recheck, confirmed baseline, preserved login, managed open, stale node and worker syntax'

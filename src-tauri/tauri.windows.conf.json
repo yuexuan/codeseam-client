@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeDevCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && node scripts/tauri-dev.mjs",
+    "beforeBuildCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && npm run build"
+  },
+  "bundle": {
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/codeseam.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/codeseam.ico",
+        "uninstallerIcon": "icons/codeseam.ico",
+        "installMode": "currentUser",
+        "installerHooks": "installer-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      }
+    }
+  }
+}

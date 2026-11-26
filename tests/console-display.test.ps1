@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/console_display.ps1')
+. (Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/console_display.ps1')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('codeseam-display-' + [guid]::NewGuid().ToString('N'))
 $id = [guid]::NewGuid().ToString()
 try {

@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))))
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_install.ps1'))))
 $script:current = 'Pacific Standard Time'
 $script:sets = 0
 $script:applyWorks = $true

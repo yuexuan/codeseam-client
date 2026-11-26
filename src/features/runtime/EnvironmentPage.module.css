@@ -183,22 +183,6 @@
   margin: 0;
   font-size: 0.95rem;
 }
-.target {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 1rem;
-}
-.target > svg {
-  color: var(--brand);
-}
-.impact {
-  padding-left: 1.4rem;
-  color: var(--secondary);
-  line-height: 1.8;
-}
 @media (width <= 1200px) {
   .page {
     padding-right: 0;

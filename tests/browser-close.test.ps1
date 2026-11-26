@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'))
+$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser.ps1'))
 $ast = [scriptblock]::Create($source).Ast
 foreach ($name in @('Get-ManagedBrowserProcesses','Close-ManagedBrowser')) {
     $definition = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name}, $false)

@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-$controller = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/virtual_runtime.ps1'))
+$controller = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/virtual_runtime.ps1'))
 $ast = [scriptblock]::Create($controller).Ast
 $elevation = $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.IfStatementAst] } | Select-Object -First 1
 $tryStatement = $elevation.Clauses[0].Item2.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] }

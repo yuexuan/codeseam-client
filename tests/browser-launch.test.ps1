@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser_worker.ps1'))
+$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser_worker.ps1'))
 $ast = [scriptblock]::Create($body).Ast
 $opening = $ast.FindAll({param($node) $node -is [Management.Automation.Language.IfStatementAst]}, $true) |
     Where-Object { $_.Clauses[0].Item1.Extent.Text -eq '$Mode -ne ''verify''' -and $_.Clauses[0].Item2.Extent.Text.Contains('$url =') } | Select-Object -First 1

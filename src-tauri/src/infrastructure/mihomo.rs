@@ -1,19 +1,17 @@
 use super::vault;
+use crate::platform::mihomo_process;
 use serde_json::{json, Value};
 use std::{
     fs,
     io::Read,
     net::TcpListener,
     path::PathBuf,
-    process::{Child, Command, Stdio},
     time::{Duration, Instant},
 };
 
-pub const VERSION: &str = "v1.19.34";
+pub(crate) use mihomo_process::VERSION;
 pub struct Engine {
-    child: Child,
-    #[cfg(windows)]
-    _job: super::managed_process::Job,
+    process: mihomo_process::Process,
     dir: PathBuf,
     client: reqwest::blocking::Client,
     base: String,
@@ -28,8 +26,8 @@ fn port() -> Result<u16, String> {
 }
 impl Drop for Engine {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = self.process.child.kill();
+        let _ = self.process.child.wait();
         let _ = fs::remove_dir_all(&self.dir);
     }
 }
@@ -37,11 +35,7 @@ impl Engine {
     pub fn start(configs: &[Value]) -> Result<Self, String> {
         let root = vault::dir()?.join("mihomo");
         fs::create_dir_all(&root).map_err(|_| "无法创建内核目录")?;
-        let binary = root.join("mihomo-v1.19.34.exe");
-        if !binary.exists() {
-            fs::write(&binary, include_bytes!("../../resources/mihomo.exe"))
-                .map_err(|_| "无法释放 Mihomo 内核")?;
-        }
+        let binary = mihomo_process::prepare(&root)?;
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -87,38 +81,14 @@ impl Engine {
             serde_json::to_vec(&config).unwrap(),
         )
         .map_err(|_| "无法写入内核配置")?;
-        let mut command = Command::new(binary);
-        command
-            .arg("-d")
-            .arg(&dir)
-            .arg("-f")
-            .arg(dir.join("config.json"))
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
-        let mut child = command.spawn().map_err(|_| "Mihomo 启动失败")?;
-        #[cfg(windows)]
-        let job = match super::managed_process::Job::new(&child) {
-            Ok(job) => job,
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(e);
-            }
-        };
+        let process = mihomo_process::launch(binary, &dir)?;
         let client = reqwest::blocking::Client::builder()
             .no_proxy()
             .timeout(Duration::from_secs(12))
             .build()
             .map_err(|_| "无法连接内核 API")?;
         let mut engine = Self {
-            child,
-            #[cfg(windows)]
-            _job: job,
+            process,
             dir,
             client,
             base: format!("http://127.0.0.1:{api}"),
@@ -130,7 +100,7 @@ impl Engine {
             if engine.get("/version").is_ok() {
                 return Ok(engine);
             }
-            if engine.child.try_wait().ok().flatten().is_some() {
+            if engine.process.child.try_wait().ok().flatten().is_some() {
                 return Err("Mihomo 无法加载节点配置".into());
             }
             std::thread::sleep(Duration::from_millis(100));

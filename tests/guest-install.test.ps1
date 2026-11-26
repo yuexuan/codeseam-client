@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))))
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_install.ps1'))))
 $root = Join-Path $env:TEMP 'codeseam-guest-contract'
 $record = [pscustomobject]@{ name='candidate'; vmId=[guid]::NewGuid(); config=@{disk=64}; deployed=$false }
 $vm = [pscustomobject]@{State='Running';Id=[guid]::NewGuid()}
@@ -34,7 +34,7 @@ Assert-Throws { Install-GuestWindows } '旧版账户配置'
 'PASS: legacy credentials require explicit recreation instead of silently changing desktop authentication'
 
 # 将实际部署和恢复应答文件作为 XML 校验。
-$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))
+$source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_install.ps1'))
 $encodedPassword = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('test-onlyPassword'))
 $documents = [regex]::Matches($source, '(?s)\$answer = @"\r?\n(.*?)\r?\n"@')
 if ($documents.Count -ne 2) { throw 'Expected deployment and recovery answer documents' }

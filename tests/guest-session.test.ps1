@@ -1,6 +1,6 @@
 ﻿# 使用模拟 Guest 验证安装函数的输出，不会连接虚拟机或修改系统。
 $ErrorActionPreference = 'Stop'
-. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))))
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_install.ps1'))))
 $root = Join-Path $env:TEMP 'codeseam-session-contract'
 $record = [pscustomobject]@{name='candidate'; vmId=[guid]::NewGuid(); deployed=$true;timezoneTarget=@{windowsId='Singapore Standard Time';ianaId='Asia/Singapore'}}
 $vm = [pscustomobject]@{State='Running'}

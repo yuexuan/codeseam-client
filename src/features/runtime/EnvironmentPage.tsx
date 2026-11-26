@@ -13,7 +13,6 @@ import {
   Layers,
   Link,
   MemoryStick,
-  Monitor,
   PanelsTopLeft,
   Play,
   Square,
@@ -26,8 +25,7 @@ import { WorkspacePanel } from '../../components/layout/WorkspacePanel';
 import { Button } from '../../components/ui/Button';
 import { StatusLabel } from '../../components/business/StatusLabel';
 import { CheckRow } from '../../components/business/CheckRow';
-import { DetailDialog } from '../../components/ui/DetailDialog';
-import { Radio } from '../../components/ui/Radio';
+import { ReconfigureDialog } from './ReconfigureDialog';
 import type {
   EnvironmentDetails,
   RuntimeEnvironmentService,
@@ -325,61 +323,15 @@ export function EnvironmentPage({
         </div>
       </WorkspacePanel>
       {switching && (
-        <DetailDialog
-          title="重新配置运行环境"
-          closeLabel="取消，保留当前环境"
-          locked={reconfigure.isPending}
+        <ReconfigureDialog
+          virtual={virtual}
+          target={targetRuntime}
+          onSelect={setTargetRuntime}
+          pending={reconfigure.isPending}
+          error={reconfigure.error?.message}
           onClose={() => setSwitching(false)}
-        >
-          <p>
-            当前使用 {virtual ? 'Virtual · 独立虚拟环境' : 'Native · 本机运行'}
-            ，请选择处理方式：
-          </p>
-          <label className={styles.target}>
-            <Radio
-              name="target-runtime"
-              value="current"
-              checked={targetRuntime === virtual}
-              onChange={() => setTargetRuntime(virtual)}
-            />
-            <Monitor />
-            <strong>重新验证当前 {virtual ? 'Virtual' : 'Native'} 环境</strong>
-          </label>
-          <label className={styles.target}>
-            <Radio
-              name="target-runtime"
-              value="other"
-              checked={targetRuntime !== virtual}
-              onChange={() => setTargetRuntime(!virtual)}
-            />
-            <Monitor />
-            <strong>
-              切换到 {virtual ? 'Native · 本机运行' : 'Virtual · 独立虚拟环境'}
-            </strong>
-          </label>
-          <ul className={styles.impact}>
-            <li>运行中的受管 Claude 应用将关闭，请先保存工作。</li>
-            <li>
-              先备份当前受管配置，再检查和准备目标环境；登录状态不会自动迁移。
-            </li>
-            <li>
-              通过验证并确认新基线后才生效。现有虚拟机、Profile
-              和历史基线会保留。
-            </li>
-          </ul>
-          {reconfigure.error && (
-            <p role="alert" className={styles.error}>
-              {reconfigure.error.message}
-            </p>
-          )}
-          <Button
-            disabled={reconfigure.isPending}
-            onClick={() => reconfigure.mutate()}
-          >
-            {reconfigure.isPending ? '正在备份并准备切换…' : '开始重新配置'}
-            <ChevronRight size={18} />
-          </Button>
-        </DetailDialog>
+          onConfirm={() => reconfigure.mutate()}
+        />
       )}
     </div>
   );

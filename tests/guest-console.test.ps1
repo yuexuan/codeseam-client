@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_browser.ps1'))
+$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_browser.ps1'))
 # 使用模拟的原生窗口验证编排流程，不修改真实窗口。
 $showDefinition = [scriptblock]::Create($body).Ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -eq 'Show-GuestConsole' }
 $body = $body.Replace($showDefinition.Extent.Text, '')
@@ -90,7 +90,7 @@ $closedBefore = $script:closed
 try { $null = & ([scriptblock]::Create($body)); throw 'Accepted missing desktop' } catch { if ($_.Exception.Message -eq 'Accepted missing desktop') { throw } }
 if ($script:closed -ne $closedBefore + 1 -or $script:launches -ne 1) { throw 'Missing desktop must close the session without launching a console' }
 $script:desktopReady = $true
-# Load helpers independently so timeout paths need not wait 20 seconds.
+# 单独加载辅助函数，使超时分支无需等待 20 秒。
 $ast = [scriptblock]::Create($body).Ast
 foreach ($definition in $ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -ne 'Show-GuestConsole' }) { . ([scriptblock]::Create($definition.Extent.Text)) }
 $script:wrongTarget = $true

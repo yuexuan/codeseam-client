@@ -1,11 +1,11 @@
 ﻿$ErrorActionPreference = 'Stop'
-$source = Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
+$source = Join-Path $PSScriptRoot '../src-tauri/src/platform/windows'
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('codeseam-node-repair-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $directory
 try {
     # 在隔离目录和模拟引擎中运行正式流程。
     Add-Type -TypeDefinition 'public class FixtureEngine { public static void Main() {} }' -OutputAssembly (Join-Path $directory 'mihomo.exe') -OutputType ConsoleApplication
-    $body = [IO.File]::ReadAllText((Join-Path $source 'node_repair.ps1')).Replace("'C:\ProgramData\CodeSeam\Network'", ("'" + $directory.Replace("'", "''") + "'"))
+    $body = [IO.File]::ReadAllText((Join-Path $source 'hyperv/node_repair.ps1')).Replace("'C:\ProgramData\CodeSeam\Network'", ("'" + $directory.Replace("'", "''") + "'"))
     $root = $directory
     $record = [pscustomobject]@{vmId=[guid]::NewGuid().ToString();node=@{id='old';exitIp='192.0.2.1'}}
     $vm = @{State='Running'}

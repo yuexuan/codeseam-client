@@ -1,5 +1,5 @@
-$ErrorActionPreference = 'Stop'
-$script = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/hyperv_compatibility.ps1'), [Text.Encoding]::UTF8)
+﻿$ErrorActionPreference = 'Stop'
+$script = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/hyperv_compatibility.ps1'), [Text.Encoding]::UTF8)
 # 使用隔离的只读测试数据，不调用系统功能管理接口，也不修改设置。
 function Get-CimInstance($ClassName, $Filter) {
     switch ($ClassName) {

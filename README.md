@@ -46,6 +46,20 @@ Guardian 为已确认身份的 Guest 应用可执行文件安装持久的直接�
 
 验证记录见 [Guardian QA](guardian-qa.md)。真实页面启动 / 停止按钮、首页离线联动、Guest 守护任务自动恢复、代理故障阻断、浏览器网络复验、精确停止以及设置安全退出 / 恢复已通过。托盘菜单恢复入口、Native 完整隔离和当前未安装的 Claude Code / Desktop 真实运行不属于已通过的现场证据。
 
+## 桌面后端目录
+
+`src-tauri/src` 保持单 crate。一次桌面操作从 `desktop/commands` 进入，由 `application` 编排，通过 `platform` 调用系统能力。
+
+| 目录 | 代码归属 |
+| --- | --- |
+| `desktop/` | Tauri 命令与绑定、操作互斥、窗口、托盘、定时任务及前端事件 |
+| `application/` | 按预检、节点、运行时、浏览器、Guardian、工作台和恢复组织用例。节点导入与测速分别在 `nodes/import.rs` 和 `nodes/probe.rs`，正式基线在 `workbench/baseline.rs` |
+| `domain/` | 节点、检查项、运行时报告及恢复操作等共享模型 |
+| `infrastructure/` | 加密记录的文件读写、Mihomo 控制 API、镜像下载和诊断日志 |
+| `platform/windows/` | DPAPI、进程约束、提权与网络设置、登录启动。浏览器、Guardian 和 Hyper-V 的 Rust 适配代码与 PowerShell 脚本按功能放在一起 |
+
+`platform/mod.rs` 汇总当前系统提供的能力。Windows 构建钩子与 NSIS 配置位于 `src-tauri/tauri.windows.conf.json`。`npm run boundaries` 检查前后端依赖边界。
+
 ## 开发与验证
 
 ```powershell

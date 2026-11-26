@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $taskRoot = Join-Path ([IO.Path]::GetTempPath()) ('codeseam-browser-test-' + [guid]::NewGuid().ToString('N'))
 $request = @{ root = $taskRoot; browser = ''; nodeId = 'fixture'; nodeName = 'Fixture node' }
 $request.timezoneTarget = @{windowsId=(Get-TimeZone).Id;ianaId='fixture-timezone'}
-$scriptPath = Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'
+$scriptPath = Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser.ps1'
 $body = [IO.File]::ReadAllText($scriptPath, [Text.Encoding]::UTF8)
 $ast = [Management.Automation.Language.Parser]::ParseInput($body, [ref]$null, [ref]$null)
 $versionFunction = $ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Ensure-BrowserVersion'}, $false)

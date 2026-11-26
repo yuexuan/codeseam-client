@@ -1,6 +1,6 @@
 ﻿# 使用模拟的操作系统函数运行，不会修改系统设置。
 $ErrorActionPreference = 'Stop'
-$source = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/system_network.ps1') -Raw -Encoding UTF8
+$source = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/network/system_network.ps1') -Raw -Encoding UTF8
 $source = $source.Replace("`r`n", "`n")
 $functions = $source.Substring(0, $source.IndexOf("`ntry {`n    if(`$Request.op"))
 . ([scriptblock]::Create($functions))

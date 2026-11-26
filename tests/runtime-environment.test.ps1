@@ -1,7 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
-$source = Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
-$scriptBody = [IO.File]::ReadAllText((Join-Path $source 'daily_virtual_runtime.ps1'))
-$snapshotBody = [IO.File]::ReadAllText((Join-Path $source 'runtime_snapshot.ps1'))
+$source = Join-Path $PSScriptRoot '../src-tauri/src/platform/windows'
+$scriptBody = [IO.File]::ReadAllText((Join-Path $source 'hyperv/daily_virtual_runtime.ps1'))
+$snapshotBody = [IO.File]::ReadAllText((Join-Path $source 'runtime/runtime_snapshot.ps1'))
 $testRoot = Join-Path $env:TEMP ('codeseam-runtime-observe-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $testRoot
 $root = $testRoot
@@ -51,7 +51,7 @@ try {
     $unlocked = & ([scriptblock]::Create($snapshotBody)) 'unlock_apps' $profile $false 'fixture worker'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if (!$unlocked.unlocked -or $manifest.runtimeLocked -or !(Test-Path -LiteralPath $profilePath)) { throw 'Cancel/commit must release the matching profile without removing it' }
-    $workerAst = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'browser_worker.ps1'))).Ast
+    $workerAst = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $source 'browser/browser_worker.ps1'))).Ast
     $workerTry = $workerAst.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] } | Select-Object -First 1
     $guard = $workerTry.Body.Statements | Where-Object { $_.Extent.Text -like '*$manifest.runtimeLocked -eq*' } | Select-Object -First 1
     if (!$guard) { throw 'Managed launch lock is missing' }

@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_install.ps1'))))
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_install.ps1'))))
 function Invoke-Command { param($Session,$ScriptBlock) & $ScriptBlock }
 function Get-ItemProperty { param($Path) return @{SystemSetupInProgress=0; OOBEInProgress=0} }
 $script:oobe = $true

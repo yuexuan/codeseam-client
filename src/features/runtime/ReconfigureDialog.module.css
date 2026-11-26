@@ -1,0 +1,128 @@
+dialog.dialog {
+  width: min(38rem, calc(100vw - 2rem));
+  padding: 0;
+}
+.header,
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+}
+.header {
+  border-bottom: 1px solid var(--separator);
+}
+.header h2 {
+  margin: 0;
+  font-size: var(--font-xl);
+  letter-spacing: var(--title-tracking);
+}
+.header p,
+.copy small,
+.note p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.header p,
+.note p {
+  margin: var(--space-1) 0 0;
+}
+button.close {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+}
+.body {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+}
+.options {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.options legend,
+.note strong {
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.options legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+.option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+}
+.option + .option {
+  margin-top: var(--space-2);
+}
+.option:hover {
+  background: var(--surface-hover);
+}
+.option:has(:checked) {
+  border-color: var(--brand-strong);
+  background: var(--selected-surface);
+}
+.option:has(:focus-visible) {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 2px;
+}
+.icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: var(--surface-solid);
+  flex: none;
+}
+.option:has(:checked) .icon {
+  color: var(--brand-strong);
+}
+.copy {
+  display: grid;
+  gap: var(--space-1);
+  margin-right: auto;
+}
+.note {
+  display: flex;
+  gap: var(--space-2);
+  color: var(--secondary);
+}
+.note > svg {
+  margin-top: 0.2rem;
+  flex: none;
+  color: var(--muted);
+}
+.footer {
+  align-items: stretch;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--separator);
+  padding-block: var(--space-3);
+}
+.footer button {
+  font-size: var(--font-sm);
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+}
+.error {
+  margin: 0;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}

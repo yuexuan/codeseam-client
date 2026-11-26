@@ -5,9 +5,9 @@ $dataRoot=Join-Path $env:LOCALAPPDATA 'CodeSeam'
 $recordBytes=[IO.File]::ReadAllBytes((Join-Path $dataRoot 'workbench-v1.dpapi'))
 $formal=[Text.Encoding]::UTF8.GetString([Security.Cryptography.ProtectedData]::Unprotect($recordBytes,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)) | ConvertFrom-Json
 if (!$formal.virtualRuntime) { throw 'This live check requires the existing formal Guest' }
-$source=Join-Path $PSScriptRoot '../src-tauri/src/infrastructure'
-$controller=[IO.File]::ReadAllText((Join-Path $source 'virtual_runtime.ps1')).TrimStart([char]0xfeff)
-foreach ($entry in @(@('# GUEST_FUNCTIONS','guest_install.ps1'),@('# GUEST_BROWSER','guest_browser.ps1'),@('# DAILY_RUNTIME','daily_virtual_runtime.ps1'),@('# NODE_REPAIR','node_repair.ps1'),@('# CONSOLE_DISPLAY','console_display.ps1'))) {
+$source=Join-Path $PSScriptRoot '../src-tauri/src/platform/windows'
+$controller=[IO.File]::ReadAllText((Join-Path $source 'hyperv/virtual_runtime.ps1')).TrimStart([char]0xfeff)
+foreach ($entry in @(@('# GUEST_FUNCTIONS','hyperv/guest_install.ps1'),@('# GUEST_BROWSER','hyperv/guest_browser.ps1'),@('# DAILY_RUNTIME','hyperv/daily_virtual_runtime.ps1'),@('# NODE_REPAIR','hyperv/node_repair.ps1'),@('# CONSOLE_DISPLAY','hyperv/console_display.ps1'))) {
     $controller=$controller.Replace($entry[0],[IO.File]::ReadAllText((Join-Path $source $entry[1])).TrimStart([char]0xfeff))
 }
 function Invoke-Formal([string]$Action,[string]$Script='') {
@@ -31,7 +31,7 @@ $diagnosis=@{taskState=[string]$task.State;lastResult=$info.LastTaskResult;lastR
     exit
 }
 if ($Scenario -eq 'health') {
-    $snapshot=[IO.File]::ReadAllText((Join-Path $source 'runtime_snapshot.ps1')).Replace('# WORKBENCH_PROCESSES',[IO.File]::ReadAllText((Join-Path $source 'workbench.ps1')))
+    $snapshot=[IO.File]::ReadAllText((Join-Path $source 'runtime/runtime_snapshot.ps1')).Replace('# WORKBENCH_PROCESSES',[IO.File]::ReadAllText((Join-Path $source 'runtime/workbench.ps1')))
     $result=Invoke-Formal 'observe' $snapshot
     $result | Select-Object state,online,exitIp,checks,error | ConvertTo-Json -Depth 8
     if (!$result.online -or $result.error -or @($result.checks | Where-Object {$_.id -in @('exit','dns','browser') -and $_.status -ne 'satisfied'}).Count) { throw 'Formal Guest health verification failed' }

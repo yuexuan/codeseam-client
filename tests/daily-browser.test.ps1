@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = Join-Path $env:TEMP ('codeseam-daily-browser-' + [guid]::NewGuid().ToString('N'))
 $profilePath = Join-Path $root 'chrome/User Data'
 $null = New-Item -ItemType Directory -Path $profilePath -Force
@@ -18,7 +18,7 @@ $manifest.verificationStatus='satisfied'
 $manifest.confirmed=$true
 $manifest.shortcutPath=Join-Path $root 'Claude.lnk'
 function Save-Fixture { $manifest | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $manifestPath -Encoding UTF8 }
-$snapshot = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/daily_browser.ps1')))
+$snapshot = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/daily_browser.ps1')))
 try {
     Save-Fixture
     Set-Content -LiteralPath $sentinel -Value 'login-retained'
@@ -31,7 +31,7 @@ try {
     $manifest.runtimeId='another-runtime'; Save-Fixture
     try { $null=& $snapshot 'read_browser' $profile $false ''; throw 'Accepted another Runtime' } catch { if ($_.Exception.Message -notlike '*身份与正式 Runtime 不一致*') { throw } }
     $manifest.runtimeId='fixture'; Save-Fixture
-    $body=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'))
+    $body=[IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser.ps1'))
     $branch=([scriptblock]::Create($body)).Ast.FindAll({param($n) $n -is [Management.Automation.Language.IfStatementAst]},$true) | Where-Object { $_.Clauses[0].Item1.Extent.Text -eq '$request.action -eq ''verify''' -and $_.Clauses[0].Item2.Extent.Text.Contains('$outputPath') } | Select-Object -First 1
     if (!$branch) { throw 'Missing daily verification branch' }
     $request=@{action='verify';nodeId='fixture-node';exitIp='203.0.113.10';worker='fixture worker'}

@@ -1,5 +1,5 @@
 ﻿$ErrorActionPreference = 'Stop'
-$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/browser.ps1'))
+$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/browser/browser.ps1'))
 $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseInput($body, [ref]$null, [ref]$parseErrors)
 if ($parseErrors) { throw ($parseErrors | Out-String) }

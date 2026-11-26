@@ -1,6 +1,6 @@
 # 使用进程内模拟对象验证原生窗口行为，不修改真实桌面窗口。
 $ErrorActionPreference = 'Stop'
-$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/infrastructure/guest_browser.ps1'))
+$body = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../src-tauri/src/platform/windows/hyperv/guest_browser.ps1'))
 $definition = [scriptblock]::Create($body).Ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.FunctionDefinitionAst] -and $_.Name -eq 'Show-GuestConsole' }
 Add-Type -TypeDefinition @"
 using System;

@@ -4,9 +4,7 @@
   "version": "0.5.1",
   "identifier": "app.codeseam.desktop",
   "build": {
-    "beforeDevCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && node scripts/tauri-dev.mjs",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-mihomo.ps1 && npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -32,26 +30,8 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": false,
-    "targets": [
-      "nsis"
-    ],
-    "icon": [
-      "icons/codeseam.ico"
-    ],
     "macOS": {
       "signingIdentity": "-"
-    },
-    "windows": {
-      "nsis": {
-        "installerIcon": "icons/codeseam.ico",
-        "uninstallerIcon": "icons/codeseam.ico",
-        "installMode": "currentUser",
-        "installerHooks": "installer-hooks.nsh"
-      },
-      "webviewInstallMode": {
-        "type": "embedBootstrapper",
-        "silent": true
-      }
     },
     "resources": {
       "../LICENSE": "LICENSE",
